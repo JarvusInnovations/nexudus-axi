@@ -6,7 +6,7 @@ Bookable resources and their availability. Contract: [api/resources](../api/reso
 
 `nexudus-axi rooms [--type <name>] [--available] [--space <slug>]`
 
-- Default schema: `rooms[N]{id,name,type,capacity,rate}` — `rate` is the human cost line derived from resource metadata (e.g. `1 credit/hr or $10/hr`), `capacity` from `Allocation`.
+- Default schema: `rooms[N]{id,name,type,capacity,rate}` — `capacity` from `Allocation`; `rate` from the structured price fields (`PriceFormatted`, else `Price` when > 0), and blank when the space doesn't populate them (verified live: a space can leave `Price: 0`/`PriceFormatted: null` and describe pricing only in the description HTML — the authoritative cost is `book --dry-run`'s preview).
 - Sorted by `DisplayOrder`; only `Visible` resources.
 - `--type` filters by `ResourceTypeName` (case-insensitive substring).
 - `--available` filters to `IsAvailable: true` — labeled as "available now (server default window)", since point-in-time flags don't answer arbitrary windows (see the caveat in [api/resources](../api/resources.md#list-bookable-resources)).

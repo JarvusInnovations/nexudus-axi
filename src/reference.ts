@@ -36,7 +36,7 @@ export const COMMAND_GROUPS: CommandGroup[] = [
           "--date <when>      day to check — YYYY-MM-DD, today, tomorrow, +Nd (slots/free/day; default today)",
           "--days <n>         days of slots to fetch (slots; default 1)",
           "--interval <min>   slot granularity in minutes (slots; default 30)",
-          "--from <time>      meeting start, e.g. 4pm or 16:00 (free; required)",
+          "--from <time>      meeting start, e.g. 4pm or 16:00 (free; default: the current :15 block — i.e. right now)",
           "--to <time|+dur>   meeting end (free; default +1h)",
           "--hours <H-H>      day-view window in 24h hours (day; default 8-20)",
           "--all              consider every room, not just favorites (free/day)",

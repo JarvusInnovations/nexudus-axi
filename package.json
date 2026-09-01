@@ -1,0 +1,59 @@
+{
+  "dependencies": {
+    "@toon-format/toon": "^4.1.1",
+    "axi-sdk-js": "^0.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "name": "nexudus-axi",
+  "version": "0.1.0",
+  "description": "Agent-ergonomic CLI for the Nexudus coworking-platform member portal — rooms, availability, credits, and bookings from the terminal, following AXI standards.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jarvus Innovations <hello@jarv.us>",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "nexudus-axi": "dist/bin/nexudus-axi.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JarvusInnovations/nexudus-axi.git"
+  },
+  "homepage": "https://github.com/JarvusInnovations/nexudus-axi#readme",
+  "bugs": {
+    "url": "https://github.com/JarvusInnovations/nexudus-axi/issues"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "build": "tsc && chmod +x dist/bin/nexudus-axi.js",
+    "check": "tsc --noEmit",
+    "dev": "bun bin/nexudus-axi.ts",
+    "docs": "bun run scripts/generate-skill.ts",
+    "docs:check": "bun run scripts/generate-skill.ts --check",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nexudus",
+    "coworking",
+    "booking",
+    "cli",
+    "agent",
+    "axi",
+    "toon"
+  ],
+  "files": [
+    "dist",
+    "skills/nexudus-axi",
+    "LICENSE",
+    "README.md"
+  ]
+}

@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 depends: [auth-spaces]
 specs:
   - specs/commands/credits.md

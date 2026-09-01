@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 depends: [rooms-read, credits-bookings-read]
 specs:
   - specs/commands/book.md

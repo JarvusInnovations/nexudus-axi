@@ -1,12 +1,14 @@
 import { AxiError } from "axi-sdk-js";
 
 /**
- * Foundation-phase stub: flags are already validated by the caller (so
- * unknown-flag rejection works before any of this fires), then the command
- * declares itself unimplemented, naming the plan that will land it.
+ * Stub for a not-yet-built surface. Flags are already validated by the
+ * caller (so unknown-flag rejection works before this fires). The message
+ * speaks the user's domain — no repo internals
+ * (specs/principles.md#output-speaks-the-users-domain-never-the-repos).
  */
-export function notImplemented(command: string, plan: string): never {
+export function notImplemented(command: string): never {
   throw new AxiError(`\`${command}\` is not implemented yet`, "NOT_IMPLEMENTED", [
-    `This command lands with the \`${plan}\` plan — see plans/${plan}.md`,
+    "This command is coming in an upcoming release",
+    "Run `nexudus-axi --help` to see what works today",
   ]);
 }

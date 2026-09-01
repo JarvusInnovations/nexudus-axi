@@ -221,6 +221,9 @@ export const ROOMS_FLAGS: Record<string, FlagSpec> = {
   list: { value: ["--type"], boolean: ["--available"] },
   view: {},
   slots: { value: ["--date", "--days", "--interval"] },
+  free: { value: ["--date", "--from", "--to", "--type"], boolean: ["--all"] },
+  day: { value: ["--date", "--hours", "--type"], boolean: ["--all"] },
+  favorites: {},
 };
 
 export const CREDITS_FLAGS: FlagSpec = {};

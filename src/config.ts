@@ -152,11 +152,43 @@ export function writeStoredSpace(stored: StoredSpace): void {
   }
 }
 
+/**
+ * Logout removes credentials only — `prefs.json` survives so preferences
+ * (favorite rooms) apply again on re-login
+ * (specs/behaviors/spaces-and-accounts.md § Preferences).
+ */
 export function removeStoredSpace(slug: string): boolean {
-  const dir = spaceDir(slug);
-  if (!existsSync(dir)) return false;
-  rmSync(dir, { recursive: true, force: true });
+  const path = tokenPath(slug);
+  if (!existsSync(path)) return false;
+  rmSync(path, { force: true });
   return true;
+}
+
+// Preferences ───────────────────────────────────────────────────────
+export interface SpacePrefs {
+  favorite_rooms?: number[];
+}
+
+export function prefsPath(slug: string): string {
+  return join(spaceDir(slug), "prefs.json");
+}
+
+/** Unparseable prefs fall back to empty — never throws. */
+export function readPrefs(slug: string): SpacePrefs {
+  const path = prefsPath(slug);
+  if (!existsSync(path)) return {};
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as SpacePrefs;
+  } catch {
+    return {};
+  }
+}
+
+export function writePrefs(slug: string, prefs: SpacePrefs): void {
+  ensureDir(configDir());
+  ensureDir(join(configDir(), "spaces"));
+  ensureDir(spaceDir(slug));
+  writeFileSync(prefsPath(slug), `${JSON.stringify(prefs, null, 2)}\n`, { mode: 0o600 });
 }
 
 export function listSpaceSlugs(): string[] {

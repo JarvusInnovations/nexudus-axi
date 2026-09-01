@@ -3,5 +3,5 @@ import { notImplemented } from "./stub.js";
 
 export async function bookCommand(args: string[]): Promise<string> {
   parseFlags("book", args, BOOK_FLAGS);
-  return notImplemented("book", "book-write");
+  return notImplemented("book");
 }

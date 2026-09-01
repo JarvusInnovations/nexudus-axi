@@ -2,14 +2,22 @@
 
 ## auth login
 
-`nexudus-axi auth login --space <slug> --email <email> --password <pw> [--totp <code>] [--timezone <iana>]`
+`nexudus-axi auth login --space <slug> --email <email> (--password <pw> | --password-stdin) [--totp <code>] [--timezone <iana>]`
+
+The password reaches the command through exactly one of three channels, checked in this order:
+
+1. `--password <pw>` — inline; fine for CI secret interpolation, discouraged in interactive shells (it lands in history and `ps`). When both this and `--password-stdin` are passed → exit 2.
+2. `--password-stdin` — read the password from stdin (trailing newline stripped). **The recommended human path**: pipe from a secret manager, e.g. `op read 'op://Private/Nexudus/password' | nexudus-axi auth login --space acme --email you@example.com --password-stdin`. Empty stdin → exit 2 with that pipe example.
+3. `NEXUDUS_AXI_PASSWORD` env — fallback when neither flag is given.
+
+None of the channels is a prompt — the command never blocks on a TTY (AXI §6). Whatever the channel, the password is exchanged for tokens and discarded.
 
 - Exchanges credentials via the password grant ([api/conventions § auth](../api/conventions.md#auth-oauth2-password--refresh-grants)), then bootstraps and caches the profile ([api/coworker](../api/coworker.md)): coworker id/name, business id/name, timezone.
 - Writes `spaces/{slug}/token.json` (0600). **The password is never persisted.**
 - `--space` accepts the bare slug (`acme`) or the full host (`acme.spaces.nexudus.com`) — normalized to the slug.
 - `--timezone` overrides/supplies the space IANA timezone when the API doesn't expose it (see [time-and-timezone](../behaviors/time-and-timezone.md)).
 - First stored space becomes the default automatically. Confirms with resolved identity (space, member name, email, plan name) + hook status.
-- Missing `--password`: exit 2 with a structured instruction to pass it (suggest reading from a secret store into the flag; never prompt).
+- No password through any channel: exit 2 with a structured instruction naming all three channels, leading with the `--password-stdin` pipe form (never prompt).
 - Re-login over an existing space replaces its tokens — idempotent.
 
 ## auth status

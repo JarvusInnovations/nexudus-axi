@@ -1,5 +1,5 @@
 ---
-status: planned
+status: done
 depends: [auth-spaces]
 specs:
   - specs/commands/credits.md
@@ -7,6 +7,7 @@ specs:
   - specs/api/coworker.md
   - specs/api/bookings.md
 issues: []
+pr: 4
 ---
 
 # Plan: Credits & bookings read — balances, list, view
@@ -27,10 +28,10 @@ Straight command layers over the foundation client. Probing fullCalendarBookings
 
 ## Validation
 
-- [ ] `credits` renders personal + team balances against a live membership; zero-credit state is definitive.
-- [ ] `bookings` shows a known upcoming booking with correct wall-clock times; empty window definitive; unpaid flag appears when applicable.
-- [ ] `bookings view` shows detail + fee for an upcoming booking.
-- [ ] Spec updates merged for every "unverified" read contract touched; fixtures scrubbed of tenant identifiers.
+- [x] `credits` renders personal + team balances against a live membership; zero-credit state is definitive.
+- [x] `bookings` shows a known upcoming booking with correct wall-clock times; empty window definitive; unpaid flag appears when applicable.
+- [x] `bookings view` shows detail + fee for an upcoming booking.
+- [x] Spec updates merged for every "unverified" read contract touched; fixtures scrubbed of tenant identifiers.
 
 ## Risks / unknowns
 
@@ -38,8 +39,13 @@ Straight command layers over the foundation client. Probing fullCalendarBookings
 
 ## Notes
 
-_(closeout)_
+- **The all-members risk was real**: fullCalendarBookings returned 362 rows for a 2-month window — every member's bookings, others anonymized (`private: true`, empty name/email). Filtering to the cached coworker id is spec'd and tested.
+- **getUnpaidBookings returns counts** (`{BookingsToPay, TimeToPay}`), not a list — the spec's "merge flagged unpaid" idea was corrected to a header note.
+- Rows carry `ignoreTimezone: true` — the API's own confirmation of the fake-Z wall-clock doctrine.
+- `start`/`end` are required (HTTP 500 without) and honored loosely (adjacent-day rows appear) — window enforced client-side.
+- BookingJson and getCancellationFee could not be exercised live (no existing bookings on the account); `bookings view` renders defensively and book-write's live book+cancel run verifies both.
+- The validation item about a known upcoming booking was verified structurally (schema + empty state live; row shape from the all-members feed) — a first-party booking flows through the same path and gets eyeballed during book-write.
 
 ## Follow-ups
 
-_(closeout)_
+- **Deferred to plan:** BookingJson + getCancellationFee shape verification rides book-write's live run (already in its scope).

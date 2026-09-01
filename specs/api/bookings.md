@@ -48,10 +48,18 @@ Response shapes **unverified** — capture during implementation (expect a `WasS
 ## Reading my bookings
 
 ```
-GET /en/bookings/fullCalendarBookings?{query}    — my bookings for a window (portal's calendar feed; query params unverified — likely start/end)
-GET /en/bookings/BookingJson/{id}                — single booking detail
-GET /en/bookings/getUnpaidBookings               — bookings awaiting payment
-GET /en/bookings/getCancellationFee?bookingId={id}
+GET /en/bookings/fullCalendarBookings?start=YYYY-MM-DD&end=YYYY-MM-DD
+GET /en/bookings/BookingJson/{id}                — single booking detail (shape unverified until book-write's live run)
+GET /en/bookings/getUnpaidBookings               — returns COUNTS: {BookingsToPay, TimeToPay} — not a list
+GET /en/bookings/getCancellationFee?bookingId={id}   (shape unverified until book-write's live run)
 ```
+
+`fullCalendarBookings` (verified live 2026-09-01):
+
+- `start`/`end` date params are **required** — omitting either returns HTTP 500.
+- Returns a bare array of camelCase rows for **every member's bookings** on the space: `{id, resourceId, resourceName, resourceTypeName, title, start, end, allDay, coworkerId, coworkerEmail, coworkerFullName, editable, tentative, invoiced, private, ignoreTimezone, ...}`.
+- Other members' rows are anonymized (`private: true`, empty name/email, `editable: false`); the caller's own rows carry their `coworkerId`. **The tool filters to the cached coworker id.**
+- Times are space wall-clock with a literal `Z` (`2026-07-31T09:00Z`) and the rows carry `ignoreTimezone: true` — the API's own confirmation of the fake-Z convention.
+- The window is loosely honored server-side (adjacent-day rows can appear) — filter client-side.
 
 `getCancellationFee` is checked before cancel so the tool can state the fee (late-cancellation policy) in the cancel output.

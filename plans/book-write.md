@@ -1,11 +1,12 @@
 ---
-status: in-progress
+status: done
 depends: [rooms-read, credits-bookings-read]
 specs:
   - specs/commands/book.md
   - specs/commands/bookings.md
   - specs/api/bookings.md
 issues: []
+pr: 6
 ---
 
 # Plan: Booking writes — book (preview→commit) and cancel
@@ -26,12 +27,12 @@ Verification requires committing real bookings on a live space: use a low-stakes
 
 ## Validation
 
-- [ ] `book --dry-run` prices a credit-covered window correctly and commits nothing (verified against live availability after).
-- [ ] `book` creates a real booking; output states id + cost/credits; the booking is visible in `bookings` and the portal.
-- [ ] Unavailable window → `UNAVAILABLE` with the slots suggestion; rule violation names the limit (live: exceed a resource's MaxBookingLength).
-- [ ] `bookings cancel` cancels it, reports the fee (0 outside the window), restores credits; re-cancel → no-op exit 0.
-- [ ] Mutation guard: with two stored spaces and no `--space`, `book` and `cancel` exit 2 before any network call.
-- [ ] Spec updates merged for the write contracts; fixtures scrubbed.
+- [x] `book --dry-run` prices a credit-covered window correctly and commits nothing (verified against live availability after).
+- [x] `book` creates a real booking; output states id + cost/credits; the booking is visible in `bookings` and the portal.
+- [x] Unavailable window → `UNAVAILABLE` with the slots suggestion; rule violation names the limit (live: exceed a resource's MaxBookingLength).
+- [x] `bookings cancel` cancels it, reports the fee (0 outside the window), restores credits; re-cancel → no-op exit 0.
+- [x] Mutation guard: with two stored spaces and no `--space`, `book` and `cancel` exit 2 before any network call.
+- [x] Spec updates merged for the write contracts; fixtures scrubbed.
 
 ## Risks / unknowns
 
@@ -40,8 +41,14 @@ Verification requires committing real bookings on a live space: use a low-stakes
 
 ## Notes
 
-_(closeout)_
+- **The member commit is NOT newBookingJson** — that endpoint (and bookingJson) returns an Access-Denied envelope for member credentials; they're the staff save. The member path is the basket's `CreateInvoice?createZeroValueInvoice=true`, which succeeds with an **empty 200** — the booking id is recovered from the calendar feed by resource+window match. `PostItems` also commits (the portal basket is client-side state) — calling both double-books; the tool uses CreateInvoice only. All spec'd.
+- **Envelope errors**: business failures arrive as HTTP 200 with `{Status: 500, Message, Errors[]}` (conflicts carry `ConflictingUniqueId`). Cancel returns `{Status: 200}`. `getbookingprice` returns an empty 200 and is useless — PreviewInvoice is the sole cost source.
+- **Live bugs found by the live run**: the calendar feed serializes `coworkerId` as a string (the numeric strict-compare made `bookings` blind to the caller's own rows); BookingJson wraps detail in `{Value, Resource}`; the fee endpoint is `{hasCancellationFee, cancellationFee}`. All fixed + spec'd.
+- **Credit round-trip verified**: 0.5 credits deducted on book (14.5/15), fully restored on cancel (15/15), fee 0 outside the late window.
+- A transient "Could not load your basket" appeared once on preview — single retry added.
+- Test bookings created during endpoint probing were all cancelled; final state clean (verified via the calendar feed and credits).
 
 ## Follow-ups
 
-_(closeout)_
+- **Deferred:** late-cancellation fee behavior remains fixture-only (exercising it live costs a real fee, as planned).
+- **Deferred:** booking updates/reschedule (bookingJson is admin-walled too — reschedule = cancel + rebook; already the spec'd v1 boundary).

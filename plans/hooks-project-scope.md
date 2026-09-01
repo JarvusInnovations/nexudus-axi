@@ -1,9 +1,10 @@
 ---
-status: in-progress
+status: done
 depends: [release-v1]
 specs:
   - specs/commands/setup.md
 issues: []
+pr: 10
 ---
 
 # Plan: Project-scope hooks + portable login examples
@@ -22,10 +23,10 @@ Add `--scope` to SETUP_FLAGS subcommands; validate `user|project`; pass `{scope,
 
 ## Validation
 
-- [ ] `setup hooks --scope project` writes the hook into `<cwd>/.claude/settings.json` (temp-dir test) and leaves `~/.claude` untouched.
-- [ ] `status --scope project` and `uninstall --scope project` read/remove the same targets; user scope unchanged by default.
-- [ ] Invalid `--scope` → exit 2 naming the two values.
-- [ ] No `op read` remains in README, SKILL.md, or CLI output (grep).
+- [x] `setup hooks --scope project` writes the hook into `<cwd>/.claude/settings.json` (temp-dir test) and leaves `~/.claude` untouched.
+- [x] `status --scope project` and `uninstall --scope project` read/remove the same targets; user scope unchanged by default.
+- [x] Invalid `--scope` → exit 2 naming the two values.
+- [x] No `op read` remains in README, SKILL.md, or CLI output (grep).
 
 ## Risks / unknowns
 
@@ -33,8 +34,10 @@ Add `--scope` to SETUP_FLAGS subcommands; validate `user|project`; pass `{scope,
 
 ## Notes
 
-_(closeout)_
+- The OpenCode risk didn't materialize: the SDK project-scopes OpenCode too (`<projectDir>/.opencode/plugins/`), so all three agents get project scope — the status output's scope/root header makes the target visible.
+- The status table asserts on the `root:` header (the table's columns carry commands, not paths); macOS `/var`→`/private/var` realpathing matters in tests.
+- `doctor`'s hooks check stays pinned to user scope — the ambient-session contract it verifies is the user-level one.
 
 ## Follow-ups
 
-_(closeout)_
+None.

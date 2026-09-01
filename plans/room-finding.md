@@ -1,11 +1,12 @@
 ---
-status: in-progress
+status: done
 depends: [rooms-read]
 specs:
   - specs/commands/rooms.md
   - specs/behaviors/spaces-and-accounts.md
   - specs/principles.md
 issues: []
+pr: 5
 ---
 
 # Plan: Room finding — free-at, day view, favorites lens, output-domain cleanup
@@ -26,11 +27,11 @@ The owner's day-to-day finding workflow, spec'd from live use: **In:** `rooms fr
 
 ## Validation
 
-- [ ] `rooms free --from 4pm` against the live space answers with favorites-lensed free/busy tables and echoes the window + lens.
-- [ ] `rooms day` renders one row per room with clipped free ranges; `all day` / `booked out` sentinels correct (fixture-driven for the mixed case).
-- [ ] `rooms favorites add/remove/clear` round-trips prefs.json; re-add is a no-op; `auth logout` leaves prefs.json in place (test).
-- [ ] With favorites set, `free`/`day` default to them and `--all` widens; with none set, all rooms considered — both states name the lens.
-- [ ] No user-facing output references plans/ or repo internals (grep over src/ for `plans/` in string literals).
+- [x] `rooms free --from 4pm` against the live space answers with favorites-lensed free/busy tables and echoes the window + lens.
+- [x] `rooms day` renders one row per room with clipped free ranges; `all day` / `booked out` sentinels correct (fixture-driven for the mixed case).
+- [x] `rooms favorites add/remove/clear` round-trips prefs.json; re-add is a no-op; `auth logout` leaves prefs.json in place (test).
+- [x] With favorites set, `free`/`day` default to them and `--all` widens; with none set, all rooms considered — both states name the lens.
+- [x] No user-facing output references plans/ or repo internals (grep over src/ for `plans/` in string literals).
 
 ## Risks / unknowns
 
@@ -38,8 +39,11 @@ The owner's day-to-day finding workflow, spec'd from live use: **In:** `rooms fr
 
 ## Notes
 
-_(closeout)_
+- Live bonus: the day view naturally surfaces shift-limited rooms — a room bookable 09:00–18:00 renders exactly that range while 24/7 rooms show `all day`, with no shift-specific code.
+- Stale-favorites fallback: if every favorite stops resolving, free/day fall back to the all lens rather than searching nothing.
+- Concurrent per-room availability fetches (Promise.all over ≤7 rooms) drew no API pushback.
+- The `rooms` catalog keeps every room visible with favorites sorted first + a `fav` column only when favorites exist (schema stays minimal otherwise).
 
 ## Follow-ups
 
-_(closeout)_
+None.

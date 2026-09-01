@@ -57,13 +57,19 @@ Five ordered health checks — credentials, token, profile cache, resources read
 npx -y nexudus-axi doctor
 ```
 
-### `nexudus-axi setup hooks [status|uninstall]`
+### `nexudus-axi setup hooks [status|uninstall] [--scope user|project]`
 
 Manage the SessionStart hook that injects the home view at session start — bare `setup hooks` installs/repairs
 
+Flags:
+
+- --scope user|project   where the hook lives (default user): user = your home config, every session;
+-                        project = the current repo's .claude/.codex/.opencode configs — travels with the repo
+
 ```sh
 npx -y nexudus-axi setup hooks
-npx -y nexudus-axi setup hooks status
+npx -y nexudus-axi setup hooks --scope project
+npx -y nexudus-axi setup hooks status --scope project
 npx -y nexudus-axi setup hooks uninstall
 ```
 

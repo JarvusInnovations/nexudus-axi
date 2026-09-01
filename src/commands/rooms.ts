@@ -56,10 +56,13 @@ function applyLens(
 ): { candidates: Resource[]; lens: "favorites" | "all" } {
   const favs = favoriteIds(space);
   if (all || favs.length === 0) return { candidates: rooms, lens: "all" };
-  const set = new Set(favs);
-  const candidates = rooms.filter((r) => set.has(r.Id));
+  const rank = new Map(favs.map((id, i) => [id, i]));
+  const candidates = rooms.filter((r) => rank.has(r.Id));
   // Every favorite gone stale → fall back to all rather than an empty search.
   if (candidates.length === 0) return { candidates: rooms, lens: "all" };
+  // Favorites order is preference RANKING (specs/commands/rooms.md): the
+  // lensed candidate order — and everything rendered from it — follows it.
+  candidates.sort((a, b) => rank.get(a.Id)! - rank.get(b.Id)!);
   return { candidates, lens: "favorites" };
 }
 
@@ -85,13 +88,19 @@ async function roomsList(parsed: Parsed): Promise<string> {
   const availableOnly = bool(parsed, "--available");
   if (availableOnly) rooms = rooms.filter((r) => r.IsAvailable === true);
 
-  // The catalog always shows every room; favorites just sort first and gain
-  // a fav column when any exist (specs/commands/rooms.md § rooms favorites).
-  const favs = new Set(favoriteIds(active.space));
+  // The catalog always shows every room; favorites sort first BY RANK and
+  // the fav column carries the rank (specs/commands/rooms.md § rooms favorites).
+  const favList = favoriteIds(active.space);
+  const rank = new Map(favList.map((id, i) => [id, i]));
   const schema = [...LIST_SCHEMA];
-  if (favs.size > 0) {
-    rooms = [...rooms].sort((a, b) => Number(favs.has(b.Id)) - Number(favs.has(a.Id)));
-    schema.push(computed("fav", (r) => (favs.has(r.Id as number) ? true : "")));
+  if (favList.length > 0) {
+    rooms = [...rooms].sort(
+      (a, b) => (rank.get(a.Id) ?? Infinity) - (rank.get(b.Id) ?? Infinity),
+    );
+    schema.push(computed("fav", (r) => {
+      const i = rank.get(r.Id as number);
+      return i === undefined ? "" : i + 1;
+    }));
   }
 
   return renderListResponse({
@@ -435,20 +444,21 @@ async function roomsFavorites(parsed: Parsed): Promise<string> {
     }
     const rooms = await fetchResources(active);
     const byId = new Map(rooms.map((r) => [r.Id, r]));
-    const rows = current.map((id) => {
+    const rows = current.map((id, i) => {
       const room = byId.get(id);
-      return { id, name: room?.Name ?? "(no longer exists on the space)", type: room?.ResourceTypeName ?? "" };
+      return { rank: i + 1, id, name: room?.Name ?? "(no longer exists on the space)", type: room?.ResourceTypeName ?? "" };
     });
     return joinBlocks(
       renderObject({ space: active.space }),
       renderList("favorites", rows as unknown as Array<Record<string, unknown>>, [
+        computed("rank", (r) => r.rank),
         computed("id", (r) => r.id),
         computed("name", (r) => r.name),
         computed("type", (r) => r.type),
       ]),
       renderHelp([
-        "Favorites are the default lens for `rooms free` and `rooms day` (--all widens)",
-        "Run `nexudus-axi rooms favorites remove <room>` or `... clear` to change the list",
+        "Order is preference ranking — free/day list the highest-ranked free room first (--all widens)",
+        "Re-rank with `nexudus-axi rooms favorites clear` then `... add <room>...` in the new order",
       ]),
     );
   }

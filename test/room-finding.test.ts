@@ -185,3 +185,83 @@ describe("setup hooks --scope", () => {
     });
   });
 });
+
+describe("favorites order is preference ranking", () => {
+  const ROOMS_RANKED = {
+    Resources: [
+      { Id: 21, UniqueId: "r21", Name: "Room Alpha", ResourceTypeName: "Phone Rooms", Allocation: 2, Visible: true, DisplayOrder: 1 },
+      { Id: 22, UniqueId: "r22", Name: "Room Beta", ResourceTypeName: "Phone Rooms", Allocation: 2, Visible: true, DisplayOrder: 2 },
+      { Id: 23, UniqueId: "r23", Name: "Room Gamma", ResourceTypeName: "Boardroom", Allocation: 8, Visible: true, DisplayOrder: 3 },
+    ],
+  };
+
+  function routeRanked() {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      let body: unknown = {};
+      if (url.includes("publicresources")) body = ROOMS_RANKED;
+      else if (url.includes("GetAvailabilityAtWithUser")) {
+        const interval = Number(new URL(url).searchParams.get("interval") ?? "30");
+        const slots = [];
+        for (let m = 0; m < 24 * 60; m += interval) {
+          const h = Math.floor(m / 60);
+          slots.push({
+            DateTime: `2026-09-02T${String(h).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`,
+            Available: true,
+          });
+        }
+        body = { AvailableSlots: slots };
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+  }
+
+  beforeEach(() => {
+    writeStoredSpace({
+      ...stored(),
+      profile_cache: {
+        coworker_id: 1, coworker_name: "Member", email: "member@example.com",
+        business_id: 1, business_name: "Acme", timezone: "America/New_York",
+        cached_at: new Date().toISOString(),
+      },
+    });
+    // Rank Beta ABOVE Alpha despite Alpha's lower DisplayOrder.
+    writePrefs("acme", { favorite_rooms: [22, 21] });
+  });
+
+  async function roomsCmd(args: string[]): Promise<string> {
+    const { roomsCommand } = await import("../src/commands/rooms.js");
+    return roomsCommand(args);
+  }
+
+  it("free lists the top-ranked room first and books it in the suggestion", async () => {
+    routeRanked();
+    const out = await roomsCmd(["free", "--from", "4pm", "--date", "2026-09-02"]);
+    expect(out.indexOf("Room Beta")).toBeLessThan(out.indexOf("Room Alpha"));
+    expect(out).toContain("book --room 22");
+  });
+
+  it("day rows follow rank under the lens; --all restores DisplayOrder", async () => {
+    routeRanked();
+    const lensed = await roomsCmd(["day", "--date", "2026-09-02"]);
+    expect(lensed.indexOf("Room Beta")).toBeLessThan(lensed.indexOf("Room Alpha"));
+    const all = await roomsCmd(["day", "--date", "2026-09-02", "--all"]);
+    expect(all.indexOf("Room Alpha")).toBeLessThan(all.indexOf("Room Beta"));
+  });
+
+  it("catalog sorts favorites by rank with the rank in the fav column", async () => {
+    routeRanked();
+    const out = await roomsCmd(["list"]);
+    expect(out.indexOf("Room Beta")).toBeLessThan(out.indexOf("Room Alpha"));
+    expect(out).toMatch(/Room Beta[^\n]*,1\n/);
+    expect(out).toMatch(/Room Alpha[^\n]*,2\n/);
+  });
+
+  it("favorites shows the rank column and re-add keeps rank", async () => {
+    routeRanked();
+    expect(await roomsCmd(["favorites", "add", "22"])).toContain("no-op");
+    const out = await roomsCmd(["favorites"]);
+    expect(out).toContain("rank");
+    expect(out.indexOf("Room Beta")).toBeLessThan(out.indexOf("Room Alpha"));
+  });
+});

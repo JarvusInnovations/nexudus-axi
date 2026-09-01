@@ -1,8 +1,8 @@
 import { delimiter, join, resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { AxiError, installSessionStartHooks } from "axi-sdk-js";
-import { SETUP_FLAGS, parseSubcommand } from "../flags.js";
+import { AxiError, installSessionStartHooks, type SessionStartHookScope } from "axi-sdk-js";
+import { SETUP_FLAGS, parseSubcommand, str, type Parsed } from "../flags.js";
 import { joinBlocks, renderHelp, renderList, renderObject } from "../output/index.js";
 
 /**
@@ -67,16 +67,41 @@ interface JsonTarget {
   path: string;
 }
 
-function jsonTargets(): JsonTarget[] {
-  const home = homedir();
+/**
+ * Resolve `--scope` per specs/commands/setup.md: `user` (default) targets each
+ * agent's home config; `project` targets the current repository's, matching
+ * the SDK's own path scheme so install/status/uninstall agree.
+ */
+function resolveScope(parsed: Parsed): SessionStartHookScope {
+  const raw = str(parsed, "--scope", "user");
+  if (raw !== "user" && raw !== "project") {
+    throw new AxiError(`--scope must be "user" or "project", not "${raw}"`, "VALIDATION_ERROR", [
+      "user: the hook lives in your home config (every session, everywhere)",
+      "project: the hook lives in this repository's config and travels with it",
+    ]);
+  }
+  return raw;
+}
+
+function scopeRoot(scope: SessionStartHookScope): string {
+  return scope === "project" ? process.cwd() : homedir();
+}
+
+function jsonTargets(scope: SessionStartHookScope): JsonTarget[] {
+  const root = scopeRoot(scope);
   return [
-    { agent: "Claude Code", path: join(home, ".claude", "settings.json") },
-    { agent: "Codex", path: join(home, ".codex", "hooks.json") },
+    { agent: "Claude Code", path: join(root, ".claude", "settings.json") },
+    { agent: "Codex", path: join(root, ".codex", "hooks.json") },
   ];
 }
 
-function opencodePluginPath(): string {
-  return join(homedir(), ".config", "opencode", "plugins", `axi-${MARKER}.js`);
+function opencodePluginPath(scope: SessionStartHookScope): string {
+  // Mirrors the SDK: user → ~/.config/opencode/plugins, project → <root>/.opencode/plugins.
+  const dir =
+    scope === "project"
+      ? join(scopeRoot(scope), ".opencode", "plugins")
+      : join(homedir(), ".config", "opencode", "plugins");
+  return join(dir, `axi-${MARKER}.js`);
 }
 
 function opencodeCommand(content: string): string {
@@ -96,8 +121,8 @@ interface StatusRow {
   current: boolean;
 }
 
-function opencodeStatus(): StatusRow {
-  const path = opencodePluginPath();
+function opencodeStatus(scope: SessionStartHookScope): StatusRow {
+  const path = opencodePluginPath(scope);
   if (!existsSync(path)) return { agent: "OpenCode", installed: false, command: "", current: false };
   let content = "";
   try {
@@ -153,13 +178,13 @@ function hookPointsAtCurrentExecutable(command: string): boolean {
   return resolved !== undefined && resolved === current;
 }
 
-function statusRows(): StatusRow[] {
-  const rows: StatusRow[] = jsonTargets().map((t) => {
+function statusRows(scope: SessionStartHookScope): StatusRow[] {
+  const rows: StatusRow[] = jsonTargets(scope).map((t) => {
     const group = sessionStartGroups(readJson(t.path)).find(isOurs);
     const command = ourCommand(group);
     return { agent: t.agent, installed: !!group, command, current: hookPointsAtCurrentExecutable(command) };
   });
-  rows.push(opencodeStatus());
+  rows.push(opencodeStatus(scope));
   return rows;
 }
 
@@ -170,8 +195,11 @@ const STATUS_SCHEMA = [
   { name: "current", extract: (i: Record<string, unknown>) => i.current },
 ];
 
-function renderStatus(suggestions: string[]): string {
-  const blocks = [renderList("hooks", statusRows() as unknown as Array<Record<string, unknown>>, STATUS_SCHEMA)];
+function renderStatus(scope: SessionStartHookScope, suggestions: string[]): string {
+  const blocks = [
+    renderObject({ scope, root: scopeRoot(scope) }),
+    renderList("hooks", statusRows(scope) as unknown as Array<Record<string, unknown>>, STATUS_SCHEMA),
+  ];
   if (isDisabled()) {
     blocks.push(renderObject({ note: "NEXUDUS_AXI_DISABLE_HOOKS=1 is set — installs are suppressed" }));
   }
@@ -185,7 +213,7 @@ function renderStatus(suggestions: string[]): string {
  * Idempotent and self-repairing via the SDK; refuses `.ts` dev entrypoints
  * and honors `NEXUDUS_AXI_DISABLE_HOOKS=1`.
  */
-export function installHooks(): string {
+export function installHooks(scope: SessionStartHookScope = "user"): string {
   if (isDisabled()) {
     return "disabled (NEXUDUS_AXI_DISABLE_HOOKS=1)";
   }
@@ -193,14 +221,21 @@ export function installHooks(): string {
     return "skipped — running from a .ts dev entrypoint (build first)";
   }
   let error: string | undefined;
-  installSessionStartHooks({ marker: MARKER, onError: (m) => (error = m) });
-  return error ? `completed with a warning: ${error}` : "installed/repaired (Claude Code, Codex, OpenCode)";
+  installSessionStartHooks({
+    marker: MARKER,
+    scope,
+    ...(scope === "project" ? { projectDir: process.cwd() } : {}),
+    onError: (m) => (error = m),
+  });
+  return error
+    ? `completed with a warning: ${error}`
+    : `installed/repaired at ${scope} scope (Claude Code, Codex, OpenCode)`;
 }
 
-function hookStatus(): string {
-  const rows = statusRows();
+function hookStatus(scope: SessionStartHookScope): string {
+  const rows = statusRows(scope);
   const anyInstalled = rows.some((r) => r.installed);
-  return renderStatus([
+  return renderStatus(scope, [
     anyInstalled
       ? "Run `nexudus-axi setup hooks uninstall` to remove the session hook"
       : "Run `nexudus-axi setup hooks` to load the home view at session start",
@@ -208,18 +243,20 @@ function hookStatus(): string {
   ]);
 }
 
-function hookInstall(): string {
-  const status = installHooks();
+function hookInstall(scope: SessionStartHookScope): string {
+  const status = installHooks(scope);
   return joinBlocks(
     renderObject({ status }),
-    renderStatus(["Run `nexudus-axi setup hooks uninstall` to remove it"]),
+    renderStatus(scope, [
+      `Run \`nexudus-axi setup hooks uninstall${scope === "project" ? " --scope project" : ""}\` to remove it`,
+    ]),
   );
 }
 
-function hookUninstall(): string {
+function hookUninstall(scope: SessionStartHookScope): string {
   const cleared: string[] = [];
 
-  for (const t of jsonTargets()) {
+  for (const t of jsonTargets(scope)) {
     const json = readJson(t.path);
     if (!json) continue;
     const groups = sessionStartGroups(json);
@@ -239,7 +276,7 @@ function hookUninstall(): string {
     }
   }
 
-  const pluginPath = opencodePluginPath();
+  const pluginPath = opencodePluginPath(scope);
   if (existsSync(pluginPath)) {
     let content = "";
     try {
@@ -262,9 +299,9 @@ function hookUninstall(): string {
   }
 
   if (cleared.length === 0) {
-    return renderObject({ status: "no nexudus-axi session hook was installed (no-op)" });
+    return renderObject({ status: `no nexudus-axi session hook was installed at ${scope} scope (no-op)` });
   }
-  return renderObject({ status: `removed from ${cleared.join(", ")}` });
+  return renderObject({ status: `removed from ${cleared.join(", ")} (${scope} scope)` });
 }
 
 export async function setupCommand(args: string[]) {
@@ -277,14 +314,15 @@ export async function setupCommand(args: string[]) {
     );
   }
 
-  const { sub } = parseSubcommand("setup hooks", args.slice(1), SETUP_FLAGS, "install");
+  const { sub, parsed } = parseSubcommand("setup hooks", args.slice(1), SETUP_FLAGS, "install");
+  const scope = resolveScope(parsed);
   switch (sub) {
     case "install":
-      return hookInstall();
+      return hookInstall(scope);
     case "status":
-      return hookStatus();
+      return hookStatus(scope);
     case "uninstall":
-      return hookUninstall();
+      return hookUninstall(scope);
     default:
       throw new AxiError(`unknown setup hooks subcommand "${sub}"`, "VALIDATION_ERROR", []);
   }
@@ -304,7 +342,7 @@ export function hookDoctorCheck(): Check {
   if (isDisabled()) {
     return { check: "hooks", status: "skipped", detail: "NEXUDUS_AXI_DISABLE_HOOKS=1 is set" };
   }
-  const rows = statusRows();
+  const rows = statusRows("user");
   const installed = rows.filter((r) => r.installed);
   if (installed.length === 0) {
     return {

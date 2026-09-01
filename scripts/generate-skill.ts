@@ -62,7 +62,8 @@ function renderPitch(): string {
 function renderSetupIntro(): string {
   return [
     "```sh",
-    `op read 'op://Private/Nexudus/password' | ${NPX_BIN} auth login --space <slug> --email <email> --password-stdin --timezone <iana>`,
+    "printf 'Password: ' && read -rs pw && echo && printf '%s' \"$pw\" | \\",
+    `  ${NPX_BIN} auth login --space <slug> --email <email> --password-stdin --timezone <iana>; unset pw`,
     "```",
     "",
     `\`<slug>\` is the space's subdomain on spaces.nexudus.com. The password is exchanged for tokens and never stored; pipe it via \`--password-stdin\` (recommended), pass \`--password\`, or set \`NEXUDUS_AXI_PASSWORD\`. Pass \`--timezone\` (IANA) — the API doesn't expose the space's zone. Verify with \`${npxify(`${BIN} doctor`)}\`.`,

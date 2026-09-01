@@ -102,7 +102,7 @@ export const COMMAND_GROUPS: CommandGroup[] = [
           "--refresh             re-validate tokens and refresh profile caches (status)",
         ],
         examples: [
-          "op read 'op://Private/Nexudus/password' | nexudus-axi auth login --space acme --email you@example.com --password-stdin",
+          "printf 'Password: ' && read -rs pw && echo && printf '%s' \"$pw\" | nexudus-axi auth login --space acme --email you@example.com --password-stdin; unset pw",
           "nexudus-axi auth status",
           "nexudus-axi auth use acme",
           "nexudus-axi auth logout --space acme",

@@ -36,7 +36,8 @@ jobs:
     - name: Test
       run: bun run test
 
-    # docs:check joins once the skill generator lands (home-hooks-docs plan).
+    - name: Check generated skill is up to date
+      run: bun run docs:check
 
     - name: Smoke test the built bundle
       # `--version` alone is not enough — it never reaches command dispatch.

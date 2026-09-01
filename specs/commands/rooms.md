@@ -60,12 +60,12 @@ The all-room day view — one row per room, free ranges at a glance.
 
 `nexudus-axi rooms favorites [add <room>... | remove <room>... | clear]`
 
-A per-space list of go-to rooms — the day-to-day lens that hides specialty resources (boardrooms, studios) without losing them.
+An **ordered** per-space list of go-to rooms — the day-to-day lens that hides specialty resources (boardrooms, studios) without losing them. **List order is preference ranking**: first is the room to grab when several are free.
 
-- `rooms favorites` — the current list (definitive empty state naming the effect: "no favorites — free/day consider all rooms").
-- `add`/`remove` take one or more room refs (id or name, resolved as `rooms view`); idempotent (re-adding is a no-op, exit 0). `clear` empties the list.
+- `rooms favorites` — the current list in rank order, with a `rank` column (definitive empty state naming the effect: "no favorites — free/day consider all rooms").
+- `add`/`remove` take one or more room refs (id or name, resolved as `rooms view`); `add` appends in the order given; idempotent (re-adding keeps the existing rank, exit 0). `clear` empties the list. Re-ranking = `clear` + `add` in the new order.
 - Storage: `spaces/{slug}/prefs.json` per [spaces-and-accounts](../behaviors/spaces-and-accounts.md#preferences) — favorites survive logout/login.
-- Effect: `rooms free` and `rooms day` default their candidate set to favorites when any are set (`--all` widens); the `rooms` list always shows every room but orders favorites first and adds a `fav` column when any exist.
+- Effect: `rooms free` and `rooms day` default their candidate set to favorites when any are set (`--all` widens), and **render candidates in rank order** when the lens is favorites — so `free`'s first row (and its `book` suggestion) is the highest-ranked free room. Under `--all` or with no favorites, `DisplayOrder` ordering applies. The `rooms` list always shows every room: favorites first in rank order, then the rest in `DisplayOrder`, with a `fav` column carrying the rank when any exist.
 - A favorite that no longer resolves (room removed by the space) is skipped with a note, never an error.
 
 ## Principles

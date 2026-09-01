@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 depends: [book-write, home-hooks-docs]
 specs:
   - specs/architecture.md

@@ -1,9 +1,10 @@
 ---
-status: in-progress
+status: done
 depends: [room-finding]
 specs:
   - specs/commands/rooms.md
 issues: []
+pr: 11
 ---
 
 # Plan: Favorites order = preference ranking
@@ -22,11 +23,11 @@ issues: []
 
 ## Validation
 
-- [ ] With favorites [B, A], `rooms free` lists a free B before a free A even when A's DisplayOrder is lower; the book suggestion names B (fixture-driven).
-- [ ] `rooms day` rows follow rank order under the favorites lens; `--all` restores DisplayOrder.
-- [ ] `rooms` shows favorites first by rank with the rank in the `fav` column; non-favorites keep DisplayOrder.
-- [ ] `rooms favorites` shows the rank column; re-add keeps existing rank (no-op).
-- [ ] Live: bare `rooms free` puts Purple first per the owner's stated ranking.
+- [x] With favorites [B, A], `rooms free` lists a free B before a free A even when A's DisplayOrder is lower; the book suggestion names B (fixture-driven).
+- [x] `rooms day` rows follow rank order under the favorites lens; `--all` restores DisplayOrder.
+- [x] `rooms` shows favorites first by rank with the rank in the `fav` column; non-favorites keep DisplayOrder.
+- [x] `rooms favorites` shows the rank column; re-add keeps existing rank (no-op).
+- [x] Live: bare `rooms free` puts Purple first per the owner's stated ranking.
 
 ## Risks / unknowns
 
@@ -34,8 +35,9 @@ None of note — pure presentation-order semantics over existing data.
 
 ## Notes
 
-_(closeout)_
+- Live check was a nice proof: the #1-ranked room was outside its bookable shift at the queried hour, so #2 correctly led the free list while #1 showed in busy with its conflict range.
+- Promise.all preserving candidate order means the lens sort is the single ordering point — free/day inherit it with no per-command sorting.
 
 ## Follow-ups
 
-_(closeout)_
+None.

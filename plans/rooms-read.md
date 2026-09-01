@@ -1,10 +1,11 @@
 ---
-status: in-progress
+status: done
 depends: [auth-spaces]
 specs:
   - specs/commands/rooms.md
   - specs/api/resources.md
 issues: []
+pr: 3
 ---
 
 # Plan: Rooms read — list, view, slots
@@ -24,10 +25,10 @@ One `_depth=3` publicresources fetch backs all three subcommands (resolution nee
 
 ## Validation
 
-- [ ] `rooms` renders the spec schema against a live space; `--type` and `--available` filter correctly.
-- [ ] `rooms view` resolves by id and by unambiguous name; ambiguous name → exit 2 listing candidates; description arrives as clean truncated text.
-- [ ] `rooms slots` for a date with mixed bookings renders correct free/booked ranges (fixture with known slot pattern); fully-booked day is definitive.
-- [ ] Date forms per time-and-timezone resolve in the space's zone (fixture with a machine-tz ≠ space-tz).
+- [x] `rooms` renders the spec schema against a live space; `--type` and `--available` filter correctly.
+- [x] `rooms view` resolves by id and by unambiguous name; ambiguous name → exit 2 listing candidates; description arrives as clean truncated text.
+- [x] `rooms slots` for a date with mixed bookings renders correct free/booked ranges (fixture with known slot pattern); fully-booked day is definitive.
+- [x] Date forms per time-and-timezone resolve in the space's zone (fixture with a machine-tz ≠ space-tz).
 
 ## Risks / unknowns
 
@@ -35,8 +36,11 @@ One `_depth=3` publicresources fetch backs all three subcommands (resolution nee
 
 ## Notes
 
-_(closeout)_
+- **Structured pricing can be entirely absent** — the live space leaves `Price: 0` / `PriceFormatted: null` and describes cost only in description HTML. The `rate` column renders what the API gives and the spec now says the authoritative cost is `book --dry-run`'s preview.
+- Booking-rule fields were mostly `null` live (`LateCancellationLimit: -30` was the only one set) — `view` renders rules compactly, only when present.
+- The mixed free/booked compression pattern couldn't be exercised live (the room was fully free), so it's pinned by unit fixtures including gap, midnight, and month-boundary cases; a real mixed day gets checked incidentally during book-write's live run.
+- Slot semantics for multi-unit resources (AllowMultipleBookings) remain unexplored — none live here set it with capacity variance; the risk note stands for a future space.
 
 ## Follow-ups
 
-_(closeout)_
+None.

@@ -38,6 +38,12 @@ Every write completes with flags alone — never prompt. Cancelling an already-c
 
 Nexudus error bodies (and its occasional HTML error pages) get translated into structured AXI errors on stdout with an actionable suggestion referencing a `nexudus-axi` command — never a raw JSON dump, HTML fragment, or stack trace. Auth failures distinguish "token expired, refresh failed — run `auth login`" from "this space rejected the request."
 
+## Output speaks the user's domain, never the repo's
+>
+> A `NOT_IMPLEMENTED` stub once pointed users at `plans/rooms-read.md` — meaningful only to someone standing inside this repository.
+
+Everything the CLI prints — help, errors, suggestions, stub notices — is written for someone using the tool, not developing it. Repo internals (plan files, spec paths, branch names) never appear in output; an unimplemented surface says it's coming in a future release and suggests what works today. The one exception: `doctor` may reference `specs/` when diagnosing portal-contract drift, since its audience at that moment *is* a developer.
+
 ## Reverse-engineered surface, spec'd honestly
 >
 > This API is undocumented; every contract here was captured from live portal traffic. Endpoints can shift under a portal update.

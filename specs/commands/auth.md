@@ -30,7 +30,7 @@ None of the channels is a prompt — the command never blocks on a TTY (AXI §6)
 
 ## auth logout
 
-`nexudus-axi auth logout [--space <slug>]` — removes that space's stored tokens (default: the active space; with 2+ stored and no flag, exit 2 listing them). Idempotent no-op when absent. Notes when `NEXUDUS_AXI_TOKEN` is still set.
+`nexudus-axi auth logout [--space <slug>]` — removes that space's stored tokens (default: the active space; with 2+ stored and no flag, exit 2 listing them). Idempotent no-op when absent. Notes when `NEXUDUS_AXI_TOKEN` is still set. Removes credentials only — per-space preferences (`prefs.json`) survive ([spaces-and-accounts § Preferences](../behaviors/spaces-and-accounts.md#preferences)).
 
 ## doctor
 

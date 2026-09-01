@@ -27,9 +27,11 @@ grant_type=password&username={email}&password={password}&totp={totp-or-empty}
 grant_type=refresh_token&refresh_token={refresh_token}
 ```
 
-- Response carries an access token and a refresh token (**unverified**: exact field names — portal code reads `AccessToken` in one path; standard OAuth `access_token` in another; capture the real body during implementation and update this spec).
+- **Both grants MUST carry a `client_id` header of `nexudus.portal.{email}`** (verified live 2026-09-01; the portal bundle concatenates the constant prefix with the username). Nexudus binds the issued refresh token to this client_id: a refresh token obtained or replayed without the matching header gets `{"error":"invalid_grant"}` (HTTP 400). Login without the header still succeeds and yields a working access token — the breakage only surfaces at refresh time.
+- Response carries `access_token` (~432 chars) and `refresh_token` (32 hex chars); the tool also tolerates PascalCase variants seen elsewhere in the portal client.
 - Every subsequent request sends `Authorization: Bearer {access_token}`.
-- On 401, refresh once with the stored refresh token and retry; if the refresh fails, fail with a structured error directing to `auth login`.
+- On 401, refresh once with the stored refresh token (and the same client_id) and retry; if the refresh fails, fail with a structured error directing to `auth login`.
+- Invalid credentials on the password grant have been observed returning HTTP 500 (not 400) for a nonexistent account — treat 5xx on login as possibly-bad-credentials in messaging.
 - TOTP: accounts with 2FA pass the code in the `totp` field of the password grant.
 - Browser CORS restricts `/api/token` to portal origins; server-side callers (this tool) are unaffected.
 

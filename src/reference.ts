@@ -88,13 +88,15 @@ export const COMMAND_GROUPS: CommandGroup[] = [
         summary: "Connect a space with your member credentials, inspect or switch stored spaces",
         flags: [
           "--email <email>       member login email (login)",
-          "--password <pw>       member password — used once for the token exchange, never stored (login)",
+          "--password-stdin      read the password from stdin — pipe it from a secret manager; keeps it out of history (login)",
+          "--password <pw>       inline password — lands in shell history; best kept to CI secret interpolation (login)",
+          "                      (NEXUDUS_AXI_PASSWORD env is the third channel; the password is used once and never stored)",
           "--totp <code>         2FA code when the account requires it (login)",
           "--timezone <iana>     the space's timezone, when the API doesn't expose it (login)",
           "--refresh             re-validate tokens and refresh profile caches (status)",
         ],
         examples: [
-          "nexudus-axi auth login --space acme --email you@example.com --password <pw>",
+          "op read 'op://Private/Nexudus/password' | nexudus-axi auth login --space acme --email you@example.com --password-stdin",
           "nexudus-axi auth status",
           "nexudus-axi auth use acme",
           "nexudus-axi auth logout --space acme",

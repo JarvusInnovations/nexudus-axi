@@ -74,16 +74,18 @@ describe("refreshGrant", () => {
     const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({ access_token: "at2", refresh_token: "rt2" }),
     );
-    const pair = await refreshGrant(BASE, "rt1");
+    const pair = await refreshGrant(BASE, "m@example.com", "rt1");
     expect(pair.accessToken).toBe("at2");
     expect(String(spy.mock.calls[0]![1]?.body)).toContain("grant_type=refresh_token");
     expect(String(spy.mock.calls[0]![1]?.body)).toContain("refresh_token=rt1");
+    const headers = spy.mock.calls[0]![1]?.headers as Record<string, string>;
+    expect(headers.client_id).toBe("nexudus.portal.m@example.com");
   });
 
   it("fails structured when the response has no recognizable pair", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ ok: true }));
     try {
-      await refreshGrant(BASE, "rt1");
+      await refreshGrant(BASE, "m@example.com", "rt1");
       expect.unreachable();
     } catch (err) {
       expect((err as AxiError).code).toBe("UNEXPECTED_RESPONSE");

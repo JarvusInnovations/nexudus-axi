@@ -178,6 +178,12 @@ export function setDefaultSpace(slug: string): void {
   writeConfig(cfg);
 }
 
+export function clearDefaultSpace(): void {
+  const cfg = readConfig();
+  delete cfg.default_space;
+  writeConfig(cfg);
+}
+
 // Active-space resolution ───────────────────────────────────────────
 /**
  * Resolve which space a command acts against, per

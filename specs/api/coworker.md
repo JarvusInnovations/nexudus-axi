@@ -5,9 +5,16 @@
 ```
 GET /en/profile?_resource=User       — portal user (login identity)
 GET /en/profile?_resource=Coworker   — coworker record (member identity)
+GET /en/business/all?_depth=1&includeRoot=true — the space's businesses (Id, Name, ...)
 ```
 
-Captured at `auth login` time to cache the identifiers every other call needs: `CoworkerId` (bookings), coworker full name, email, and the space's `BusinessId`/`BusinessName` (**unverified** exact field paths — capture during implementation). The space's IANA timezone must also be resolved here if the payload carries it (**unverified**; fallback: a `--timezone` option on `auth login`, since wall-clock math needs it — see `specs/behaviors/time-and-timezone.md`).
+Captured at `auth login` time to cache the identifiers every other call needs (field paths verified live 2026-09-01):
+
+- `User` → `{ FullName, Email, CoworkerId, Id, ... }` — `CoworkerId` is the booking identity.
+- `Coworker` → `{ Id, FullName, Email, HomeSpaceId, InvoicingBusinessId, SimpleTimeZoneId, CanMakeBookings, CanBookForTeam, ... }` (~179 fields; `Coworker.Id` equals `User.CoworkerId`).
+- Business name: the `/en/business/all` row whose `Id` matches `Coworker.HomeSpaceId` (fallback: `InvoicingBusinessId`, then the first row).
+
+**The API exposes no IANA timezone** — `SimpleTimeZoneId` is a numeric reference with no public mapping. The space's zone therefore comes from `auth login --timezone <iana>`; when unset, wall-clock math falls back to the machine zone and `doctor` flags it (see `specs/behaviors/time-and-timezone.md`).
 
 ## Booking credits & benefits
 

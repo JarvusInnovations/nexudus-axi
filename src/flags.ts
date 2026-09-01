@@ -201,14 +201,14 @@ export function parseSubcommand(
 // `--space` is global and never declared per-command.
 
 export const AUTH_FLAGS: Record<string, FlagSpec> = {
-  login: { value: ["--email", "--password", "--totp", "--timezone"] },
+  login: { value: ["--email", "--password", "--totp", "--timezone"], boolean: ["--password-stdin"] },
   status: { boolean: ["--refresh"] },
   use: {},
   logout: {},
 };
 
 export const SETUP_FLAGS: Record<string, FlagSpec> = {
-  hooks: {},
+  install: {},
   status: {},
   uninstall: {},
 };

@@ -19,9 +19,10 @@ npx -y nexudus-axi credits                     # what can I spend?
 npm install -g nexudus-axi   # or keep using npx -y nexudus-axi
 
 # Connect a space (the slug is its subdomain on spaces.nexudus.com).
-# Pipe the password from a secret manager — it's exchanged for tokens and never stored:
-op read 'op://Private/Nexudus/password' | \
-  nexudus-axi auth login --space acme --email you@example.com --password-stdin --timezone America/New_York
+# The password is read without echo, piped in, and exchanged for tokens — never stored,
+# never in shell history. (Or pipe from any secret manager into --password-stdin.)
+printf 'Password: ' && read -rs pw && echo && printf '%s' "$pw" | \
+  nexudus-axi auth login --space acme --email you@example.com --password-stdin --timezone America/New_York; unset pw
 
 nexudus-axi doctor           # five health checks, incl. a live read
 ```

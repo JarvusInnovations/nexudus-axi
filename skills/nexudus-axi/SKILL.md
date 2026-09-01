@@ -22,7 +22,8 @@ Every example below runs via `npx -y nexudus-axi` so it works whether or not the
 ## Setup
 
 ```sh
-op read 'op://Private/Nexudus/password' | npx -y nexudus-axi auth login --space <slug> --email <email> --password-stdin --timezone <iana>
+printf 'Password: ' && read -rs pw && echo && printf '%s' "$pw" | \
+  npx -y nexudus-axi auth login --space <slug> --email <email> --password-stdin --timezone <iana>; unset pw
 ```
 
 `<slug>` is the space's subdomain on spaces.nexudus.com. The password is exchanged for tokens and never stored; pipe it via `--password-stdin` (recommended), pass `--password`, or set `NEXUDUS_AXI_PASSWORD`. Pass `--timezone` (IANA) — the API doesn't expose the space's zone. Verify with `npx -y nexudus-axi doctor`.
@@ -42,7 +43,7 @@ Flags:
 - --refresh             re-validate tokens and refresh profile caches (status)
 
 ```sh
-op read 'op://Private/Nexudus/password' | nexudus-axi auth login --space acme --email you@example.com --password-stdin
+printf 'Password: ' && read -rs pw && echo && printf '%s' "$pw" | nexudus-axi auth login --space acme --email you@example.com --password-stdin; unset pw
 npx -y nexudus-axi auth status
 npx -y nexudus-axi auth use acme
 npx -y nexudus-axi auth logout --space acme

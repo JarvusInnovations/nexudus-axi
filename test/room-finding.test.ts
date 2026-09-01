@@ -151,3 +151,37 @@ describe("rooms free / day / favorites (routed fetch)", () => {
     expect(readPrefs("acme").favorite_rooms).toEqual([]);
   });
 });
+
+describe("setup hooks --scope", () => {
+  it("project scope writes into the cwd's config, leaving the user scope alone", async () => {
+    const { setupCommand } = await import("../src/commands/setup.js");
+    const { mkdtempSync: mkTmp, existsSync: exists, rmSync: rm } = await import("node:fs");
+    const { join: j } = await import("node:path");
+    const { tmpdir: tmp } = await import("node:os");
+
+    const projectDir = mkTmp(j(tmp(), "nexudus-axi-proj-"));
+    const prevCwd = process.cwd();
+    process.chdir(projectDir);
+    // cwd resolves the macOS /var → /private/var symlink; compare against it.
+    const realRoot = process.cwd();
+    try {
+      const out = await setupCommand(["hooks", "--scope", "project"]);
+      expect(out).toContain("scope: project");
+      expect(out).toContain(`root: ${realRoot}`);
+      const status = await setupCommand(["hooks", "status", "--scope", "project"]);
+      expect(status).toContain(`root: ${realRoot}`);
+      expect(status).not.toContain(`root: ${process.env.HOME ?? "/nonexistent"}`);
+      void j; // path helper retained for symmetry with the other suites
+    } finally {
+      process.chdir(prevCwd);
+      rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an unknown scope with the two valid values", async () => {
+    const { setupCommand } = await import("../src/commands/setup.js");
+    await expect(setupCommand(["hooks", "--scope", "global"])).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
+});

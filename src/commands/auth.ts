@@ -53,7 +53,7 @@ function validateTimezone(zone: string): string {
 const LOGIN_USAGE =
   "nexudus-axi auth login --space <slug> --email <email> (--password <pw> | --password-stdin) [--totp <code>] [--timezone <iana>]";
 const STDIN_EXAMPLE =
-  "Recommended: pipe from a secret manager — `op read 'op://Private/Nexudus/password' | nexudus-axi auth login --space <slug> --email <email> --password-stdin`";
+  "Recommended: pipe it in without echo or history — `printf 'Password: ' && read -rs pw && echo && printf '%s' \"$pw\" | nexudus-axi auth login --space <slug> --email <email> --password-stdin; unset pw`";
 
 /**
  * Resolve the password from exactly one of the three spec'd channels

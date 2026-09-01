@@ -42,6 +42,33 @@ export function addDays(date: WallDate, days: number): WallDate {
   return { y: shifted.getUTCFullYear(), m: shifted.getUTCMonth() + 1, d: shifted.getUTCDate() };
 }
 
+/** The current wall-clock time-of-day in an IANA zone (defaults to the machine zone). */
+export function nowInZone(zone?: string, now: Date = new Date()): WallTime {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    ...(zone ? { timeZone: zone } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const [h, min] = fmt.format(now).split(":").map(Number);
+  // en-GB renders midnight as "00"; guard the legacy "24" form anyway.
+  return { h: h === 24 ? 0 : h!, min: min! };
+}
+
+/**
+ * Snap a wall time onto the quarter-hour grid (Nexudus's smallest booking
+ * unit) for a "right now" default: floor to the current :00/:15/:30/:45
+ * block — except within `thresholdMin` of the next block, which rounds up
+ * (you'd arrive as that block starts). May return h === 24 (midnight
+ * rollover); callers validate.
+ */
+export function snapToQuarterHour(time: WallTime, thresholdMin = 3): WallTime {
+  const totalMin = time.h * 60 + time.min;
+  const intoBlock = totalMin % 15;
+  const snapped = intoBlock >= 15 - thresholdMin ? totalMin + (15 - intoBlock) : totalMin - intoBlock;
+  return { h: Math.floor(snapped / 60), min: snapped % 60 };
+}
+
 // ── Flag parsing ────────────────────────────────────────────────────
 const DATE_FORMS = "YYYY-MM-DD, today, tomorrow, yesterday, +Nd/-Nd, +Nw/-Nw";
 

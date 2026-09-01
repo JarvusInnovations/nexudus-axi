@@ -34,11 +34,11 @@ Bookable resources and their availability. Contract: [api/resources](../api/reso
 
 ## rooms free
 
-`nexudus-axi rooms free --from <time> [--to <time|+dur>] [--date <when>] [--type <name>] [--all] [--space <slug>]`
+`nexudus-axi rooms free [--from <time>] [--to <time|+dur>] [--date <when>] [--type <name>] [--all] [--space <slug>]`
 
-Answers "which rooms are available for my 4pm meeting" in one call.
+Answers "which rooms are available for my 4pm meeting" — and, bare, "which rooms are free right now."
 
-- Defaults: `--date today`, `--to +1h` (the meeting-length default). `--from` is required.
+- Defaults: `--date today`, `--to +1h` (the meeting-length default), and **`--from` defaults to the current quarter-hour block on the space's clock** — floored to the most recent :00/:15/:30/:45 so a bare `rooms free` answers "where can I go *right now*", except when within 3 minutes of the next block, which rounds up (you'd arrive as that block starts). 15 minutes is Nexudus's smallest booking unit; `free`'s availability grid uses 15-minute slots for the same reason. The resolved window is always echoed, so the snapped default is visible.
 - **Candidate set = the favorites lens** ([§ rooms favorites](#rooms-favorites)): favorites when configured, else all visible rooms; `--all` forces all; `--type` filters either set.
 - A room is free when every availability slot overlapping the half-open window is `Available`.
 - Output: `free[N]{id,name,type,capacity}` then `busy[N]{id,name,conflict}` (conflict = the booked range overlapping the window, wall-clock). Header echoes `space:`, `date:`, `window:`, `timezone:`, and `lens: favorites|all`.

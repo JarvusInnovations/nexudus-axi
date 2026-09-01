@@ -66,15 +66,17 @@ describe("rooms free / day / favorites (routed fetch)", () => {
     ],
   };
 
-  /** A slot grid for 2026-09-02: free except 16:00–17:00 for the given guid set. */
-  function grid(bookedGuids: Set<string>, guid: string) {
+  /**
+   * A slot grid for 2026-09-02 honoring the requested interval: free except
+   * 16:00–17:00 for the given guid set.
+   */
+  function grid(bookedGuids: Set<string>, guid: string, intervalMin: number) {
     const slots = [];
-    for (let h = 0; h < 24; h++) {
-      for (const min of [0, 30]) {
-        const t = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-        const inBooked = bookedGuids.has(guid) && h === 16;
-        slots.push({ DateTime: `2026-09-02T${t}`, Available: !inBooked });
-      }
+    for (let m = 0; m < 24 * 60; m += intervalMin) {
+      const h = Math.floor(m / 60);
+      const t = `${String(h).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      const inBooked = bookedGuids.has(guid) && h === 16;
+      slots.push({ DateTime: `2026-09-02T${t}`, Available: !inBooked });
     }
     return { AvailableSlots: slots };
   }
@@ -85,7 +87,11 @@ describe("rooms free / day / favorites (routed fetch)", () => {
       const body = url.includes("publicresources")
         ? ROOMS
         : url.includes("GetAvailabilityAtWithUser")
-          ? grid(bookedGuids, new URL(url).searchParams.get("guid") ?? "")
+          ? grid(
+              bookedGuids,
+              new URL(url).searchParams.get("guid") ?? "",
+              Number(new URL(url).searchParams.get("interval") ?? "30"),
+            )
           : {};
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     });

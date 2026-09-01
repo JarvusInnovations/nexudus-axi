@@ -3,7 +3,7 @@ import { ROOMS_FLAGS, bool, parseSubcommand, requirePositional, str, type Parsed
 import { readPrefs, writePrefs } from "../config.js";
 import { fetchResources, resolveRoom, stripHtml, amenities, rateOf, type Resource } from "../nexudus/resolve.js";
 import { compressSlots, fetchAvailability, type SlotRange } from "../nexudus/slots.js";
-import { formatWallDate, parseDateFlag, renderTime, resolveWindow } from "../time/wallclock.js";
+import { formatWallDate, nowInZone, parseDateFlag, renderTime, resolveWindow, snapToQuarterHour } from "../time/wallclock.js";
 import {
   compact,
   computed,
@@ -224,7 +224,7 @@ async function roomsSlots(parsed: Parsed): Promise<string> {
 }
 
 // ── rooms free — "which rooms are available for my 4pm meeting" ─────
-const FREE_INTERVAL = 30;
+const FREE_INTERVAL = 15; // Nexudus's smallest booking unit
 
 const FREE_SCHEMA = [
   computed("id", (r) => r.Id),
@@ -245,15 +245,22 @@ function conflictsIn(booked: SlotRange[], from: string, to: string): SlotRange[]
 }
 
 async function roomsFree(parsed: Parsed): Promise<string> {
-  const fromFlag = str(parsed, "--from");
-  if (!fromFlag) {
-    throw new AxiError("--from is required", "USAGE", [
-      "nexudus-axi rooms free --from <time> [--to <time|+dur>] [--date <when>]",
-      "Example: `nexudus-axi rooms free --from 4pm` (a one-hour meeting by default)",
-    ]);
-  }
   const active = activeSpaceFrom(parsed);
   const zone = active.stored?.profile_cache?.timezone;
+
+  // Bare `rooms free` answers "where can I go RIGHT NOW": --from floors to
+  // the current quarter-hour block on the space's clock, rounding up within
+  // 3 minutes of the next block (specs/commands/rooms.md § rooms free).
+  let fromFlag = str(parsed, "--from");
+  if (!fromFlag) {
+    const snapped = snapToQuarterHour(nowInZone(zone));
+    if (snapped.h > 23) {
+      throw new AxiError("It's almost midnight at the space — pass an explicit window", "VALIDATION_ERROR", [
+        "nexudus-axi rooms free --date tomorrow --from <time>",
+      ]);
+    }
+    fromFlag = renderTime(snapped);
+  }
   const window = resolveWindow({
     date: str(parsed, "--date"),
     from: fromFlag,

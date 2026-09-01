@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AxiError } from "axi-sdk-js";
 import {
+  nowInZone,
+  snapToQuarterHour,
   addDays,
   formatWallDate,
   parseDateFlag,
@@ -124,5 +126,30 @@ describe("serialization round-trip", () => {
 
   it("formats dates without zone markers", () => {
     expect(formatWallDate({ y: 2026, m: 9, d: 5 })).toBe("2026-09-05");
+  });
+});
+
+describe("nowInZone / snapToQuarterHour", () => {
+  it("reads the space wall clock, not the machine's", () => {
+    // 03:30Z = 23:30 previous day in New York.
+    expect(nowInZone("America/New_York", NOW)).toEqual({ h: 23, min: 30 });
+    expect(nowInZone("UTC", NOW)).toEqual({ h: 3, min: 30 });
+  });
+
+  it("floors to the current :15 block — the 'right now' default", () => {
+    expect(snapToQuarterHour({ h: 15, min: 26 })).toEqual({ h: 15, min: 15 });
+    expect(snapToQuarterHour({ h: 15, min: 0 })).toEqual({ h: 15, min: 0 });
+    expect(snapToQuarterHour({ h: 15, min: 41 })).toEqual({ h: 15, min: 30 });
+  });
+
+  it("rounds up within 3 minutes of the next block", () => {
+    expect(snapToQuarterHour({ h: 15, min: 58 })).toEqual({ h: 16, min: 0 });
+    expect(snapToQuarterHour({ h: 15, min: 12 })).toEqual({ h: 15, min: 15 });
+    expect(snapToQuarterHour({ h: 15, min: 44 })).toEqual({ h: 15, min: 45 });
+    expect(snapToQuarterHour({ h: 15, min: 56 })).toEqual({ h: 15, min: 45 });
+  });
+
+  it("can roll past midnight (caller validates)", () => {
+    expect(snapToQuarterHour({ h: 23, min: 59 })).toEqual({ h: 24, min: 0 });
   });
 });

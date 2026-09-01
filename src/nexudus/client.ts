@@ -131,7 +131,7 @@ export async function nexudusRequest<T = Record<string, unknown>>(
 
   // One-shot refresh-and-retry on 401 (specs/api/conventions.md § Auth).
   if (res.status === 401 && !options.noRefresh && active.stored?.refresh_token && active.source !== "env") {
-    const pair = await refreshGrant(active.baseUrl, active.stored.refresh_token).catch(() => null);
+    const pair = await refreshGrant(active.baseUrl, active.stored.email, active.stored.refresh_token).catch(() => null);
     if (pair) {
       active.token = pair.accessToken;
       active.stored = {

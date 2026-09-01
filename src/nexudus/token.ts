@@ -34,8 +34,22 @@ function readTokenBody(body: Record<string, unknown>): TokenPair | null {
   };
 }
 
+/**
+ * The portal stamps every `/api/token` call with a `client_id` header of
+ * `nexudus.portal.<email>` (verified in the portal bundle: the constant
+ * prefix `"nexudus.portal."` concatenated with the username). Nexudus binds
+ * the issued refresh token to this client_id, so login and refresh MUST send
+ * the identical value or the refresh grant returns `invalid_grant`.
+ */
+const CLIENT_ID_PREFIX = "nexudus.portal.";
+
+export function clientIdFor(email: string): string {
+  return `${CLIENT_ID_PREFIX}${email}`;
+}
+
 async function tokenGrant(
   baseUrl: string,
+  email: string,
   form: Record<string, string>,
   operation: string,
 ): Promise<TokenPair> {
@@ -46,6 +60,7 @@ async function tokenGrant(
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        client_id: clientIdFor(email),
       },
       body: new URLSearchParams(form).toString(),
     });
@@ -105,15 +120,20 @@ export function passwordGrant(
 ): Promise<TokenPair> {
   return tokenGrant(
     baseUrl,
+    email,
     { grant_type: "password", username: email, password, totp: totp ?? "" },
     "login",
   );
 }
 
-/** Refresh grant — used transparently by the client on 401. */
-export function refreshGrant(baseUrl: string, refreshToken: string): Promise<TokenPair> {
+/**
+ * Refresh grant — used transparently by the client on 401. `email` must be
+ * the same login the refresh token was issued to (the client_id binding).
+ */
+export function refreshGrant(baseUrl: string, email: string, refreshToken: string): Promise<TokenPair> {
   return tokenGrant(
     baseUrl,
+    email,
     { grant_type: "refresh_token", refresh_token: refreshToken },
     "token refresh",
   );

@@ -11,7 +11,7 @@ Flow (one invocation, no prompts):
 1. Resolve the room (id or name, as `rooms view`) and the wall-clock window ([time-and-timezone](../behaviors/time-and-timezone.md)).
 2. **Price preview** via `PreviewInvoice`: cost in dollars, credits consumed, or both.
 3. `--dry-run`: stop here. Output `would_book:` with room, window, `total:`, `credits_used:`, and availability — exit 0.
-4. Commit via `newBookingJson` with a fresh client-generated `UniqueId` and `ChargeNow: true`.
+4. Commit via the basket's `CreateInvoice?createZeroValueInvoice=true` (the member path — see [api/bookings § Write endpoints](../api/bookings.md#write-endpoints-verified-live-2026-09-01)) with a fresh client-generated `UniqueId` and `ChargeNow: true`. Success is an empty 200; the booking id is recovered from the calendar feed by matching resource + window.
 5. Output: `booked:` with booking id, room, window (space wall-clock), `total:` and `credits_used:` — **cost visibility is mandatory** ([Preview before commit](../principles.md#preview-before-commit-but-never-prompt)).
 
 Failure modes (all structured, per [Translate errors](../principles.md#translate-errors-never-leak-raw-api-noise)):

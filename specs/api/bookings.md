@@ -35,30 +35,38 @@ POST /en/basket/PreviewInvoice?createZeroValueInvoice=true&_shape=...   body: [{
 
 Credits appear as negative `LinesRaw` offsets; a fully-credit-covered booking shows `TotalAmount: 0.00` with `UsedBookingCredits` stating how many credits it consumed. **This is the cost answer `book` must surface.**
 
-## Write endpoints
+## Write endpoints (verified live 2026-09-01)
 
 ```
-POST /en/bookings/newBookingJson        body: Booking   — create   (portal client: saveBookingToCreate)
-POST /en/bookings/bookingJson           body: Booking   — update   (portal client: saveBookingToUpdate)
-POST /en/bookings/deletejson/{id}       body: (unverified) — cancel (portal client: cancelBooking)
+POST /en/basket/CreateInvoice?createZeroValueInvoice=true   body: [{"Type":"booking","Booking":{...}}]   — CREATE (the member commit)
+POST /en/bookings/deletejson/{id}                           body: {}                                     — CANCEL
 ```
 
-Response shapes **unverified** — capture during implementation (expect a `WasSuccessful`/`Message` envelope and/or the saved booking). Paid bookings not covered by credits may require the basket checkout flow (`POST /en/basket/CreateInvoice`, `POST /en/basket/PostItems`) — v1 targets credit/zero-value bookings via `newBookingJson` with `ChargeNow: true` and must surface a structured error, not a silent misbook, if the API refuses an uncovered paid booking.
+- **`newBookingJson`/`bookingJson` are NOT the member path** — they return an `Access Denied` envelope for member credentials (they're the staff/admin save). The member portal commits through the basket: `CreateInvoice` books the item(s) and creates the (zero-value, when credit-covered) invoice.
+- **`PostItems` also commits** — it is not an add-to-cart; the portal's basket is client-side state. The tool uses `CreateInvoice` only; calling both double-books.
+- **Success is an empty 200 body.** The booking id is not returned — recover it by refetching the calendar feed and matching resource + window.
+- Business-rule failures come as **HTTP 200 with an envelope**: `{Status: 500, Message, Errors[]}` — e.g. `"This resource is already booked..."` with `Errors[0].Message` carrying JSON naming the `ConflictingUniqueId`. Treat `Status >= 400` in a 200 body as the real outcome.
+- `deletejson/{id}` with an empty JSON body returns `{Status: 200, Message: ""}` on success; cancelling restores credit-covered value per the space's policy.
+- `getbookingprice` returns an **empty 200** — useless; `PreviewInvoice` is the sole cost source.
 
 ## Reading my bookings
 
 ```
 GET /en/bookings/fullCalendarBookings?start=YYYY-MM-DD&end=YYYY-MM-DD
-GET /en/bookings/BookingJson/{id}                — single booking detail (shape unverified until book-write's live run)
+GET /en/bookings/BookingJson/{id}                — single booking detail
 GET /en/bookings/getUnpaidBookings               — returns COUNTS: {BookingsToPay, TimeToPay} — not a list
-GET /en/bookings/getCancellationFee?bookingId={id}   (shape unverified until book-write's live run)
+GET /en/bookings/getCancellationFee?bookingId={id}
 ```
+
+`BookingJson/{id}` (verified live): `{ Value: {Id, ResourceId, ResourceName, FromTime, ToTime, Tentative, Invoiced, Notes, CoworkerId, ChargeNow, DiscountCode, Repeat*, ...}, Resource: {Id, Name, ...} }` — note `Value.FromTime`/`ToTime` are wall-clock **without** any zone suffix here (`2026-09-02T22:00:00`).
+
+`getCancellationFee` (verified live): `{ hasCancellationFee: boolean, cancellationFee: number | null }`.
 
 `fullCalendarBookings` (verified live 2026-09-01):
 
 - `start`/`end` date params are **required** — omitting either returns HTTP 500.
 - Returns a bare array of camelCase rows for **every member's bookings** on the space: `{id, resourceId, resourceName, resourceTypeName, title, start, end, allDay, coworkerId, coworkerEmail, coworkerFullName, editable, tentative, invoiced, private, ignoreTimezone, ...}`.
-- Other members' rows are anonymized (`private: true`, empty name/email, `editable: false`); the caller's own rows carry their `coworkerId`. **The tool filters to the cached coworker id.**
+- Other members' rows are anonymized (`private: true`, empty name/email, `editable: false`); the caller's own rows carry their `coworkerId` — **as a STRING** (`"100000002"`), unlike the numeric ids everywhere else. **The tool filters to the cached coworker id with a string-tolerant compare.**
 - Times are space wall-clock with a literal `Z` (`2026-07-31T09:00Z`) and the rows carry `ignoreTimezone: true` — the API's own confirmation of the fake-Z convention.
 - The window is loosely honored server-side (adjacent-day rows can appear) — filter client-side.
 

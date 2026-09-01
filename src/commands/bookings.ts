@@ -9,8 +9,8 @@ import {
 } from "../nexudus/mybookings.js";
 import { addDays, formatWallDate, parseDateFlag, renderWallclock, todayInZone } from "../time/wallclock.js";
 import { compact, computed, joinBlocks, renderHelp, renderListResponse, renderObject } from "../output/index.js";
+import { cancelBooking, fetchCancellationFee } from "../nexudus/booking.js";
 import { activeSpaceFrom } from "./auth.js";
-import { notImplemented } from "./stub.js";
 
 /** `bookings [list|view|cancel]` — see `specs/commands/bookings.md`. */
 
@@ -22,8 +22,7 @@ export async function bookingsCommand(args: string[]): Promise<string> {
     case "view":
       return bookingsView(parsed);
     case "cancel":
-      // Mutation — lands with book-write.
-      return notImplemented("bookings cancel");
+      return bookingsCancel(parsed);
     default:
       // Unreachable — parseSubcommand already validated `sub`.
       throw new AxiError(`unknown bookings subcommand "${sub}"`, "VALIDATION_ERROR", []);
@@ -95,10 +94,23 @@ async function bookingsList(parsed: Parsed): Promise<string> {
 }
 
 /**
- * BookingJson's exact shape is unverified until book-write's live run
- * (specs/api/bookings.md) — this renders defensively from the fields the
- * portal client is known to read, and falls back to the calendar row.
+ * Booking detail per the verified BookingJson shape:
+ * `{Value: {...booking fields...}, Resource: {Id, Name}}` — Value times are
+ * wall-clock without any zone suffix (specs/api/bookings.md).
  */
+interface BookingJsonResponse {
+  Value?: {
+    Id?: number;
+    ResourceName?: string;
+    FromTime?: string;
+    ToTime?: string;
+    Tentative?: boolean;
+    Invoiced?: boolean;
+    Notes?: string | null;
+  };
+  Resource?: { Id?: number; Name?: string };
+}
+
 async function bookingsView(parsed: Parsed): Promise<string> {
   const idRaw = requirePositional(parsed, 0, "booking id", "nexudus-axi bookings view <id>");
   if (!/^\d+$/.test(idRaw)) {
@@ -108,35 +120,84 @@ async function bookingsView(parsed: Parsed): Promise<string> {
   }
   const active = activeSpaceFrom(parsed);
 
-  const booking = await nexudusRequest<Record<string, unknown>>(active, `/en/bookings/BookingJson/${idRaw}`);
+  const booking = await nexudusRequest<BookingJsonResponse>(active, `/en/bookings/BookingJson/${idRaw}`);
+  const value = booking.Value;
+  if (!value?.Id) {
+    throw new AxiError(`No booking ${idRaw} is visible to your account`, "NOT_FOUND", [
+      "Run `nexudus-axi bookings` to list your bookings and their ids",
+    ]);
+  }
 
-  const fee = await nexudusRequest<Record<string, unknown>>(active, "/en/bookings/getCancellationFee", {
-    query: { bookingId: idRaw },
-  }).catch(() => undefined);
-  const feeValue =
-    fee && typeof fee === "object"
-      ? ((fee.Fee ?? fee.fee ?? fee.Amount ?? fee.amount) as number | undefined)
-      : undefined;
-
-  const fromTime = booking.FromTime ?? booking.fromTime;
-  const toTime = booking.ToTime ?? booking.toTime;
+  const { fee, has } = await fetchCancellationFee(active, Number(idRaw)).catch(() => ({ fee: 0, has: false }));
 
   return joinBlocks(
     renderObject(
       compact({
         space: active.space,
-        id: Number(idRaw),
-        room: (booking.ResourceName as string) ?? (booking.resourceName as string) ?? undefined,
-        from: typeof fromTime === "string" ? renderWallclock(fromTime) : undefined,
-        to: typeof toTime === "string" ? renderWallclock(toTime) : undefined,
-        tentative: booking.Tentative === true ? true : undefined,
-        invoiced: booking.Invoiced === true ? true : undefined,
-        notes: (booking.Notes as string) || undefined,
-        cancellation_fee: feeValue,
+        id: value.Id,
+        room: value.ResourceName ?? booking.Resource?.Name ?? undefined,
+        from: value.FromTime ? renderWallclock(value.FromTime) : undefined,
+        to: value.ToTime ? renderWallclock(value.ToTime) : undefined,
+        tentative: value.Tentative === true ? true : undefined,
+        invoiced: value.Invoiced === true ? true : undefined,
+        notes: value.Notes || undefined,
+        cancellation_fee: has ? fee : 0,
       }),
     ),
     renderHelp([
       `Run \`nexudus-axi bookings cancel ${idRaw}\` to cancel this booking`,
     ]),
+  );
+}
+
+/**
+ * `bookings cancel <id>` — fee-aware, idempotent cancellation
+ * (specs/commands/bookings.md). The fee is fetched first so the output can
+ * state what the cancellation cost, and an already-cancelled/unknown booking
+ * resolves per AXI idempotency rules.
+ */
+async function bookingsCancel(parsed: Parsed): Promise<string> {
+  const idRaw = requirePositional(parsed, 0, "booking id", "nexudus-axi bookings cancel <id>");
+  if (!/^\d+$/.test(idRaw)) {
+    throw new AxiError(`"${idRaw}" is not a booking id`, "VALIDATION_ERROR", [
+      "Run `nexudus-axi bookings` to list your bookings and their ids",
+    ]);
+  }
+  const id = Number(idRaw);
+  // Cancellation is a mutation — explicit space with 2+ stored.
+  const active = activeSpaceFrom(parsed, { mutation: true });
+
+  // Fetch the row first so cancel-of-cancelled can no-op and output can name
+  // the booking. The calendar feed is the reliable existence check.
+  const zone = active.stored?.profile_cache?.timezone;
+  const today = todayInZone(zone);
+  const mine = await fetchMyBookings(
+    active,
+    formatWallDate(addDays(today, -30)),
+    formatWallDate(addDays(today, 90)),
+  );
+  const row = mine.find((r) => r.id === id);
+  if (!row) {
+    // Unknown to my calendar: already cancelled (no-op) or never mine.
+    return renderObject({
+      status: `booking ${id} is not on your calendar — already cancelled, past the fetch window, or not yours (no-op)`,
+    });
+  }
+
+  const { fee } = await fetchCancellationFee(active, id).catch(() => ({ fee: 0 }));
+
+  await cancelBooking(active, id); // envelope failures throw inside
+
+  return joinBlocks(
+    renderObject(
+      compact({
+        cancelled: row.resourceName ?? `booking ${id}`,
+        id,
+        space: active.space,
+        window: `${splitWallclock(row.start).date} ${splitWallclock(row.start).time}–${splitWallclock(row.end).time}`,
+        fee: fee > 0 ? fee.toFixed(2) : "0.00",
+      }),
+    ),
+    renderHelp(["Run `nexudus-axi bookings` to confirm; credits used by the booking are restored by the space's policy"]),
   );
 }

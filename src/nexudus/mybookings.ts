@@ -17,7 +17,8 @@ export interface CalendarBookingRow {
   start: string;
   end: string;
   allDay?: boolean;
-  coworkerId?: number;
+  /** A STRING in the live feed, unlike numeric ids elsewhere (specs/api/bookings.md). */
+  coworkerId?: number | string;
   tentative?: boolean;
   invoiced?: boolean;
   editable?: boolean;
@@ -47,7 +48,8 @@ export async function fetchMyBookings(
     query: { start: fromDate, end: toDate },
   });
   return (Array.isArray(rows) ? rows : [])
-    .filter((r) => coworkerId !== undefined && r.coworkerId === coworkerId)
+    // String-tolerant: the feed serializes coworkerId as a string.
+    .filter((r) => coworkerId !== undefined && String(r.coworkerId) === String(coworkerId))
     // The server honors the window loosely — enforce it client-side.
     .filter((r) => {
       const day = splitWallclock(r.start).date;

@@ -23,6 +23,11 @@ Every command except `setup`. Output of any command that touched the API names t
 - Token refresh: on 401 (or a locally-detected stale token), refresh once via the refresh grant, persist the new pair, retry the request. A failed refresh yields `TOKEN_EXPIRED` with an `auth login --space <slug>` suggestion.
 - `--space` is an always-allowed global flag (like `--help`): valid on every command, never reported unknown.
 - Config layout follows slack-axi: `~/.config/nexudus-axi/config.json` (default space) + `~/.config/nexudus-axi/spaces/{slug}/token.json` (0600, dir 0700).
+
+## Preferences
+
+Non-credential, per-space preferences (e.g. favorite rooms) live in `spaces/{slug}/prefs.json` — a sibling of `token.json`, plain JSON `{ favorite_rooms: number[] }`. Credentials and preferences have different lifecycles: **`auth logout` removes `token.json` only; preferences survive logout and apply again on re-login.** An unparseable prefs file falls back to empty, never throws.
+
 - One email may be a member of several spaces; each space login is independent (Nexudus tokens are per-host).
 
 ## Principles

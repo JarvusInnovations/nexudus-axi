@@ -25,11 +25,13 @@ export async function homeCommand(args: string[]): Promise<string> {
     renderObject({
       spaces: slugs.join(", ") || "(env token)",
       default: getDefaultSpace() ?? (slugs.length === 1 ? slugs[0] : undefined) ?? "(unset)",
-      status: "connected — booking commands land plan by plan (see plans/)",
+      status: "connected",
     }),
     renderHelp([
-      "Run `nexudus-axi rooms` to see bookable rooms (rooms-read plan)",
-      "Run `nexudus-axi doctor` to check credentials (auth-spaces plan)",
+      "Run `nexudus-axi rooms` to see bookable rooms",
+      "Run `nexudus-axi rooms free --from <time>` to find a room for a meeting",
+      "Run `nexudus-axi bookings` to see what you have booked",
+      "Run `nexudus-axi doctor` to check credentials",
     ]),
   );
 }

@@ -23,7 +23,7 @@ export async function bookingsCommand(args: string[]): Promise<string> {
       return bookingsView(parsed);
     case "cancel":
       // Mutation — lands with book-write.
-      return notImplemented("bookings cancel", "book-write");
+      return notImplemented("bookings cancel");
     default:
       // Unreachable — parseSubcommand already validated `sub`.
       throw new AxiError(`unknown bookings subcommand "${sub}"`, "VALIDATION_ERROR", []);

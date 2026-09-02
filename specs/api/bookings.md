@@ -35,6 +35,33 @@ POST /en/basket/PreviewInvoice?createZeroValueInvoice=true&_shape=...   body: [{
 
 Credits appear as negative `LinesRaw` offsets; a fully-credit-covered booking shows `TotalAmount: 0.00` with `UsedBookingCredits` stating how many credits it consumed. **This is the cost answer `book` must surface.**
 
+## Datetime format is load-bearing — an offset-bearing value silently shifts the booking
+>
+> Verified live 2026-09-02 against the member portal.
+
+`FromTime`/`ToTime` must be sent as **bare space wall-clock**, with either the fake `Z` suffix
+(`2026-09-05T14:00:00.000Z`) or no suffix at all (`2026-09-05T14:00:00`) — both are stored verbatim.
+
+**Sending a real UTC offset moves the booking, silently.** `2026-09-05T15:00:00-04:00` is normalized to
+UTC and the *converted* value is then stored as the wall clock: the booking lands at **19:00**, four hours
+late, with an HTTP 200 and no error of any kind.
+
+This is best understood as a **client-side footgun, not a server defect** — the API's contract is
+"wall-clock in, wall-clock out", and an offset-bearing value violates it; the server then does something
+defensible with input it never promised to accept. It is very likely the explanation for third-party
+reports of "the Nexudus booking endpoint screws up timezones": any client that serializes a local time
+through `Date.toISOString()`, or otherwise emits an offset, will book at the wrong hour and blame the API.
+Hence `toApiWallclock` builds the string by hand, and nothing in the tool may pass a `Date`-derived or
+offset-formatted value into a booking payload.
+
+Two negative results from the same probe, worth recording so they aren't re-investigated: the
+`X-Use-Timezone` header (accepted by CORS) has **no effect** on booking storage, and the fake-Z round-trip
+is stable at midnight boundaries and across the US DST fall-back ambiguous hour (2026-11-01T01:00).
+
+Blame aside, the failure mode is silent and only observable after the write — so writes must **read the
+stored time back and compare**, which also covers divergences we haven't characterized. See
+[commands/book § confirmed times](../commands/book.md).
+
 ## Write endpoints (verified live 2026-09-01)
 
 ```

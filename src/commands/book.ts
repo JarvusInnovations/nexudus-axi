@@ -6,10 +6,10 @@ import {
   creditsUsed,
   previewInvoice,
 } from "../nexudus/booking.js";
-import { fetchMyBookings } from "../nexudus/mybookings.js";
+import { fetchMyBookings, splitWallclock } from "../nexudus/mybookings.js";
 import { fetchResources, resolveRoom } from "../nexudus/resolve.js";
 import { compressSlots, fetchAvailability } from "../nexudus/slots.js";
-import { formatWallDate, renderTime, resolveWindow } from "../time/wallclock.js";
+import { addDays, formatWallDate, renderTime, resolveWindow } from "../time/wallclock.js";
 import { compact, joinBlocks, renderHelp, renderObject } from "../output/index.js";
 import { activeSpaceFrom } from "./auth.js";
 
@@ -114,28 +114,95 @@ export async function bookCommand(args: string[]): Promise<string> {
     );
   }
 
-  // 4. Commit. Success is an empty 200 — recover the id from the calendar
-  //    feed by matching resource + window (specs/api/bookings.md).
+  // 4. Commit, then CONFIRM from the server rather than echoing the request
+  //    (specs/commands/book.md § Confirmed times). The created row is found
+  //    by id set-difference across date ± 1 — never by matching the window,
+  //    since a shifted booking must still be found, possibly on another day.
+  const probeFrom = formatWallDate(addDays(window.date, -1));
+  const probeTo = formatWallDate(addDays(window.date, 1));
+  const before = await fetchMyBookings(active, probeFrom, probeTo).catch(() => []);
+  const knownIds = new Set(before.map((r) => r.id));
+
   await createBooking(active, booking);
-  const mine = await fetchMyBookings(active, date, date).catch(() => []);
-  const id = mine.find(
-    (r) => r.resourceId === room.Id && r.start.slice(0, 16) === fromKey,
-  )?.id;
+
+  const after = await fetchMyBookings(active, probeFrom, probeTo).catch(() => []);
+  let created = after.filter((r) => !knownIds.has(r.id) && r.resourceId === room.Id);
+  if (created.length > 1) {
+    // Concurrent booking on the same resource — prefer the row whose start is
+    // closest to the request rather than guessing silently. Wall-clock strings
+    // compare as digits (YYYYMMDDHHmm), so a plain numeric delta orders them.
+    const asNumber = (wallclock: string) => Number(wallclock.replace(/\D/g, "").slice(0, 12));
+    const target = asNumber(fromKey);
+    created = [...created].sort(
+      (a, b) => Math.abs(asNumber(a.start) - target) - Math.abs(asNumber(b.start) - target),
+    );
+  }
+  const row = created[0];
+
+  const requestedWindow = `${renderTime(window.from)}–${renderTime(window.to)}`;
+
+  // Could not identify the row: never present an unverified booking as confirmed.
+  if (!row) {
+    process.exitCode = 1;
+    return joinBlocks(
+      renderObject(
+        compact({
+          booked: room.Name,
+          space: active.space,
+          date,
+          requested: requestedWindow,
+          confirmed: false,
+          ...costFields,
+        }),
+      ),
+      renderHelp([
+        "The booking was accepted but could not be read back — run `nexudus-axi bookings` to confirm it landed and get its id",
+      ]),
+    );
+  }
+
+  const confirmedFrom = splitWallclock(row.start);
+  const confirmedTo = splitWallclock(row.end);
+  const confirmedWindow = `${confirmedFrom.time}–${confirmedTo.time}`;
+  const shifted = confirmedFrom.date !== date || confirmedWindow !== requestedWindow;
+
+  if (shifted) {
+    process.exitCode = 1;
+    return joinBlocks(
+      renderObject(
+        compact({
+          warning: `the space stored a different time than requested — requested ${date} ${requestedWindow}, confirmed ${confirmedFrom.date} ${confirmedWindow}`,
+          booked: room.Name,
+          id: row.id,
+          space: active.space,
+          date: confirmedFrom.date,
+          confirmed_window: confirmedWindow,
+          requested_window: requestedWindow,
+          ...costFields,
+        }),
+      ),
+      renderHelp([
+        `Run \`nexudus-axi bookings cancel ${row.id}\` to undo the mis-timed booking`,
+        "Re-book with an explicit --date/--from/--to, then re-check the confirmed window",
+      ]),
+    );
+  }
 
   return joinBlocks(
     renderObject(
       compact({
         booked: room.Name,
-        id,
+        id: row.id,
         space: active.space,
-        date,
-        window: `${renderTime(window.from)}–${renderTime(window.to)}`,
+        date: confirmedFrom.date,
+        window: confirmedWindow,
+        confirmed: true,
         ...costFields,
       }),
     ),
     renderHelp([
       "Run `nexudus-axi bookings` to see it in context",
-      id !== undefined ? `Run \`nexudus-axi bookings cancel ${id}\` to undo` : "Run `nexudus-axi bookings` to find its id (the API returned none directly)",
+      `Run \`nexudus-axi bookings cancel ${row.id}\` to undo`,
     ]),
   );
 }

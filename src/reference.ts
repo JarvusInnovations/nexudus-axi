@@ -115,12 +115,17 @@ export const COMMAND_GROUPS: CommandGroup[] = [
         examples: ["nexudus-axi doctor"],
       },
       {
-        usage: "setup hooks [status|uninstall]",
+        usage: "setup hooks [status|uninstall] [--scope user|project]",
         summary:
           "Manage the SessionStart hook that injects the home view at session start — bare `setup hooks` installs/repairs",
+        flags: [
+          "--scope user|project   where the hook lives (default user): user = your home config, every session;",
+          "                       project = the current repo's .claude/.codex/.opencode configs — travels with the repo",
+        ],
         examples: [
           "nexudus-axi setup hooks",
-          "nexudus-axi setup hooks status",
+          "nexudus-axi setup hooks --scope project",
+          "nexudus-axi setup hooks status --scope project",
           "nexudus-axi setup hooks uninstall",
         ],
       },

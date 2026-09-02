@@ -11,8 +11,18 @@ Flow (one invocation, no prompts):
 1. Resolve the room (id or name, as `rooms view`) and the wall-clock window ([time-and-timezone](../behaviors/time-and-timezone.md)).
 2. **Price preview** via `PreviewInvoice`: cost in dollars, credits consumed, or both.
 3. `--dry-run`: stop here. Output `would_book:` with room, window, `total:`, `credits_used:`, and availability — exit 0.
-4. Commit via the basket's `CreateInvoice?createZeroValueInvoice=true` (the member path — see [api/bookings § Write endpoints](../api/bookings.md#write-endpoints-verified-live-2026-09-01)) with a fresh client-generated `UniqueId` and `ChargeNow: true`. Success is an empty 200; the booking id is recovered from the calendar feed by matching resource + window.
-5. Output: `booked:` with booking id, room, window (space wall-clock), `total:` and `credits_used:` — **cost visibility is mandatory** ([Preview before commit](../principles.md#preview-before-commit-but-never-prompt)).
+4. Commit via the basket's `CreateInvoice?createZeroValueInvoice=true` (the member path — see [api/bookings § Write endpoints](../api/bookings.md#write-endpoints-verified-live-2026-09-01)) with a fresh client-generated `UniqueId` and `ChargeNow: true`. Success is an empty 200 and returns no id.
+5. **Confirm from the server, never echo the request.** Snapshot the caller's bookings for the resource across `date ± 1 day` *before* the commit, refetch after, and identify the new row by set difference on booking id — deliberately not by matching the requested window, since a shifted booking must still be found (and could land on an adjacent day).
+6. Output: `booked:` with booking id, room, and the **confirmed** window read back from the server (space wall-clock), plus `total:` and `credits_used:` — **cost visibility is mandatory** ([Preview before commit](../principles.md#preview-before-commit-but-never-prompt)).
+
+## Confirmed times
+
+A booking's reported window is always the server's stored value, never the requested one. Two divergences must be visible rather than silent ([api/bookings § datetime format](../api/bookings.md#datetime-format-is-load-bearing--an-offset-bearing-value-silently-shifts-the-booking)):
+
+- **Shifted** — the new row's window differs from what was requested. Output leads with a `warning:` naming both windows (`requested 15:00–15:30, confirmed 19:00–19:30`), still reports the id so the booking can be cancelled, and **exits 1**: the booking exists, but the caller's intent was not satisfied, and an agent must not read that as success.
+- **Unconfirmed** — the commit returned success but no new row could be identified. Output carries `confirmed: false` with a note to check `bookings`, and exits 1. Never present an unverified booking as confirmed.
+
+The happy path reports `confirmed: true` and exits 0. `--dry-run` has nothing to confirm and is unaffected.
 
 Failure modes (all structured, per [Translate errors](../principles.md#translate-errors-never-leak-raw-api-noise)):
 

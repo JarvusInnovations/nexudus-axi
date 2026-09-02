@@ -1,10 +1,11 @@
 ---
-status: in-progress
+status: done
 depends: [book-write]
 specs:
   - specs/commands/book.md
   - specs/api/bookings.md
 issues: []
+pr: 16
 ---
 
 # Plan: Confirmed booking times — read back, never echo
@@ -33,11 +34,11 @@ full structured payload including the id.
 
 ## Validation
 
-- [ ] Live: a normal booking reports `confirmed: true` with the server's window and exits 0.
-- [ ] Fixture: a server row differing from the request → leading `warning:` naming both windows, id present, exit 1.
-- [ ] Fixture: no new row after commit → `confirmed: false`, exit 1, no fabricated window.
-- [ ] Fixture: a shift onto the *next day* is still identified (id-diff, not window match).
-- [ ] Live re-probe confirms the offset trap and that our own payload never carries an offset.
+- [x] Live: a normal booking reports `confirmed: true` with the server's window and exits 0.
+- [x] Fixture: a server row differing from the request → leading `warning:` naming both windows, id present, exit 1.
+- [x] Fixture: no new row after commit → `confirmed: false`, exit 1, no fabricated window.
+- [x] Fixture: a shift onto the *next day* is still identified (id-diff, not window match).
+- [x] Live re-probe confirms the offset trap and that our own payload never carries an offset.
 
 ## Risks / unknowns
 
@@ -46,8 +47,18 @@ full structured payload including the id.
 
 ## Notes
 
-_(closeout)_
+- **The probe reproduced a real shift, but it is a client footgun, not a server defect**: only an
+  offset-bearing `FromTime` (`15:00:00-04:00` → stored `19:00`) moves the booking. The fake-Z and bare
+  forms both round-trip verbatim, `X-Use-Timezone` does nothing, and midnight + the DST fall-back
+  ambiguous hour are stable. Third-party reports of "Nexudus mangling timezones" are most plausibly
+  clients emitting `Date.toISOString()` — worth verifying before accepting that framing.
+- The tool was never exposed (`toApiWallclock` hand-builds the string), so this plan is defense-in-depth
+  rather than a bug fix — the readback also catches divergences nobody has characterized yet.
+- Set-difference on id (not window matching) is the load-bearing choice: the previous implementation
+  looked the booking up *by the requested start*, so a shifted booking would have surfaced as a missing
+  id rather than a warning — the failure would have been quiet in exactly the case that matters.
 
 ## Follow-ups
 
-_(closeout)_
+- **Deferred:** `bookings view`/`cancel` still render times from whatever row they fetched, which is
+  already server-sourced — no echo risk — so no change was needed there.

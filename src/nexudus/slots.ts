@@ -11,10 +11,28 @@ export interface AvailabilitySlot {
   /** Space wall-clock, no zone suffix: `2026-09-01T14:00`. */
   DateTime: string;
   Time?: string;
+  /** Bookable IN PRINCIPLE (inside shifts, permitted) — NOT "unbooked". */
   Available: boolean;
   Capacity?: number;
   BookedCount?: number;
   Booked?: boolean;
+  AllowMultipleBookings?: boolean;
+}
+
+/**
+ * The single occupancy rule (specs/api/resources.md § Per-slot availability).
+ *
+ * `Available` is a bookable-hours flag, not an occupancy signal: a fully
+ * booked slot still reports `Available: true` alongside
+ * `{Capacity: 1, BookedCount: 1, Booked: true}`. Reading `Available` alone
+ * reports booked rooms as free — the bug this predicate exists to prevent.
+ */
+export function isSlotFree(slot: AvailabilitySlot): boolean {
+  if (slot.Available === false) return false;
+  const capacity = typeof slot.Capacity === "number" && slot.Capacity > 0 ? slot.Capacity : 1;
+  const bookedCount =
+    typeof slot.BookedCount === "number" ? slot.BookedCount : slot.Booked === true ? capacity : 0;
+  return bookedCount < capacity;
 }
 
 interface AvailabilityResponse {
@@ -52,8 +70,9 @@ function addMinutesWallclock(dateTime: string, minutes: number): string {
 
 /**
  * Compress the slot grid into contiguous half-open ranges. Each slot covers
- * [DateTime, DateTime + interval); consecutive slots with the same
- * availability merge. Gaps in the grid close the running range.
+ * [DateTime, DateTime + interval); consecutive slots with the same freeness
+ * (per `isSlotFree`, NOT the raw `Available` flag) merge. Gaps in the grid
+ * close the running range.
  */
 export function compressSlots(
   slots: AvailabilitySlot[],
@@ -62,21 +81,22 @@ export function compressSlots(
   const free: SlotRange[] = [];
   const booked: SlotRange[] = [];
 
-  let current: { available: boolean; from: string; to: string } | null = null;
+  let current: { free: boolean; from: string; to: string } | null = null;
 
   const flush = () => {
     if (!current) return;
-    (current.available ? free : booked).push({ from: current.from, to: current.to });
+    (current.free ? free : booked).push({ from: current.from, to: current.to });
     current = null;
   };
 
   for (const slot of slots) {
     const end = addMinutesWallclock(slot.DateTime, intervalMinutes);
-    if (current && current.available === slot.Available && current.to === slot.DateTime) {
+    const slotFree = isSlotFree(slot);
+    if (current && current.free === slotFree && current.to === slot.DateTime) {
       current.to = end;
     } else {
       flush();
-      current = { available: slot.Available, from: slot.DateTime, to: end };
+      current = { free: slotFree, from: slot.DateTime, to: end };
     }
   }
   flush();

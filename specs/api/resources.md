@@ -29,6 +29,9 @@ GET /en/bookings/GetAvailabilityAtWithUser?days={n}&guid={resource UniqueId}&sta
 
 - The portal uses `interval=30` and `days=1`.
 - Response: `{ Resource: {Id, Name, NoReturnPolicy*, IntervalLimit}, AvailableSlots: [{ DateTime, Date, Time, Available, AllowMultipleBookings, Capacity, BookedCount, BookedDesks, Booked }] }`
+- **`Available` does NOT mean unbooked** (verified live 2026-09-02, after a booking attempt was refused for a slot the tool had reported free). It means the slot is *bookable in principle* — inside the resource's shifts and permitted for this member. Occupancy is carried separately by `Booked` / `BookedCount` / `Capacity`. A genuinely occupied slot looks like `{Available: true, Capacity: 1, BookedCount: 1, Booked: true}`.
+- **A slot is free only when** `Available !== false` **and** `BookedCount < Capacity` (treating a missing `Capacity` as 1, and a missing `BookedCount` as `Capacity` when `Booked` is true). This is the single occupancy rule every command must use; reading `Available` alone reports booked rooms as free.
+- Multi-unit resources (`AllowMultipleBookings`, `Capacity > 1`) are covered by the same rule — partial occupancy still leaves the slot bookable.
 - `DateTime` is space wall-clock (`2026-09-01T14:00`, no zone suffix here).
 - A companion `GET /en/bookings/GetAvailabilityAt` exists for anonymous callers (**unverified** — portal client branches on having a customer); the tool always uses the `WithUser` variant.
 

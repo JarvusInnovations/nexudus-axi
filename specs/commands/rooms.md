@@ -40,7 +40,7 @@ Answers "which rooms are available for my 4pm meeting" — and, bare, "which roo
 
 - Defaults: `--date today`, `--to +1h` (the meeting-length default), and **`--from` defaults to the current quarter-hour block on the space's clock** — floored to the most recent :00/:15/:30/:45 so a bare `rooms free` answers "where can I go *right now*", except when within 3 minutes of the next block, which rounds up (you'd arrive as that block starts). 15 minutes is Nexudus's smallest booking unit; `free`'s availability grid uses 15-minute slots for the same reason. The resolved window is always echoed, so the snapped default is visible.
 - **Candidate set = the favorites lens** ([§ rooms favorites](#rooms-favorites)): favorites when configured, else all visible rooms; `--all` forces all; `--type` filters either set.
-- A room is free when every availability slot overlapping the half-open window is `Available`.
+- A room is free when every availability slot overlapping the half-open window is free per the occupancy rule in [api/resources](../api/resources.md#per-slot-availability) — `Available` **and** under capacity. `Available` alone is a bookable-hours flag, not an occupancy signal.
 - Output: `free[N]{id,name,type,capacity}` then `busy[N]{id,name,conflict}` (conflict = the booked range overlapping the window, wall-clock). Header echoes `space:`, `date:`, `window:`, `timezone:`, and `lens: favorites|all`.
 - Empty free-set is definitive and suggests `--all` when the lens was favorites.
 - Suggestions: `book --room <id> --date <date> --from <from> --to <to>` carrying the resolved window verbatim.

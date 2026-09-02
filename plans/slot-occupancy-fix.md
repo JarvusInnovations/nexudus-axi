@@ -5,7 +5,7 @@ specs:
   - specs/api/resources.md
   - specs/commands/rooms.md
 issues: []
-pr: 18
+pr: 17
 ---
 
 # Plan: Availability reads occupancy, not the `Available` flag

@@ -1,10 +1,11 @@
 ---
-status: in-progress
+status: done
 depends: [rooms-read]
 specs:
   - specs/api/resources.md
   - specs/commands/rooms.md
 issues: []
+pr: 18
 ---
 
 # Plan: Availability reads occupancy, not the `Available` flag
@@ -33,11 +34,11 @@ from `slot.Available` to the predicate, which propagates to every caller (`rooms
 
 ## Validation
 
-- [ ] Unit: `{Available: true, Capacity: 1, BookedCount: 1, Booked: true}` is busy; unbooked is free;
+- [x] Unit: `{Available: true, Capacity: 1, BookedCount: 1, Booked: true}` is busy; unbooked is free;
       multi-unit respects capacity; `Available: false` is never free; missing counts fall back sanely.
-- [ ] Unit: `compressSlots` splits ranges on occupancy while `Available` stays true throughout.
-- [ ] Live: the window that exposed the bug now reports the booked favorites as busy with their ranges.
-- [ ] Live: `--all` surfaces a genuinely free room for the same window.
+- [x] Unit: `compressSlots` splits ranges on occupancy while `Available` stays true throughout.
+- [x] Live: the window that exposed the bug now reports the booked favorites as busy with their ranges.
+- [x] Live: `--all` surfaces a genuinely free room for the same window.
 
 ## Risks / unknowns
 
@@ -46,8 +47,18 @@ from `slot.Available` to the predicate, which propagates to every caller (`rooms
 
 ## Notes
 
-_(closeout)_
+- **Found in production use, not by testing** — a `book` call was refused ("already booked") for a window
+  `rooms free` had just listed as free. The booking engine was right; our reading was wrong.
+- The original `rooms-read` plan spec'd "free when every overlapping slot is `Available`", so this was a
+  spec defect propagated faithfully into code — the fix had to start in `specs/api/resources.md`.
+- **The grid is strictly better than the bookings feed** for availability: a resource carrying
+  `IsAvailable: false` (a space-level block) shows `Booked: true` in its slots with no corresponding row in
+  `fullCalendarBookings`. Cross-checking the feed would have *under*-reported busy.
+- Existing fixtures were unaffected (slots with only `Available: true` still evaluate free), so the
+  regression surfaced only against live data — a reminder that fixtures mirroring our own misreading
+  cannot catch a misread contract.
 
 ## Follow-ups
 
-_(closeout)_
+- **Deferred:** multi-unit (`Capacity > 1`) occupancy is implemented and unit-tested but unexercised live;
+  confirm against a space that has such a resource.

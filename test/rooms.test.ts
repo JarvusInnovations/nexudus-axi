@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AxiError } from "axi-sdk-js";
 import { resolveRoom, stripHtml, amenities, rateOf, type Resource } from "../src/nexudus/resolve.js";
-import { compressSlots, type AvailabilitySlot } from "../src/nexudus/slots.js";
+import { compressSlots, isSlotFree, type AvailabilitySlot } from "../src/nexudus/slots.js";
 
 process.env.NEXUDUS_AXI_DISABLE_HOOKS = "1";
 
@@ -115,5 +115,59 @@ describe("compressSlots", () => {
 
   it("handles empty grids", () => {
     expect(compressSlots([], 30)).toEqual({ free: [], booked: [] });
+  });
+});
+
+describe("isSlotFree — occupancy, not the Available flag", () => {
+  it("treats a fully-booked slot as busy even though Available is true", () => {
+    // The exact live shape that caused booked rooms to be reported free.
+    expect(
+      isSlotFree({ DateTime: "x", Available: true, Capacity: 1, BookedCount: 1, Booked: true }),
+    ).toBe(false);
+  });
+
+  it("treats an unbooked in-hours slot as free", () => {
+    expect(
+      isSlotFree({ DateTime: "x", Available: true, Capacity: 1, BookedCount: 0, Booked: false }),
+    ).toBe(true);
+  });
+
+  it("respects capacity on multi-unit resources", () => {
+    const slot = (BookedCount: number) => ({
+      DateTime: "x", Available: true, Capacity: 4, BookedCount, AllowMultipleBookings: true,
+    });
+    expect(isSlotFree(slot(2))).toBe(true);
+    expect(isSlotFree(slot(4))).toBe(false);
+    expect(isSlotFree(slot(5))).toBe(false);
+  });
+
+  it("out-of-hours (Available false) is never free", () => {
+    expect(isSlotFree({ DateTime: "x", Available: false, Capacity: 1, BookedCount: 0 })).toBe(false);
+  });
+
+  it("falls back sanely when the counts are missing", () => {
+    expect(isSlotFree({ DateTime: "x", Available: true })).toBe(true);
+    expect(isSlotFree({ DateTime: "x", Available: true, Booked: true })).toBe(false);
+  });
+});
+
+describe("compressSlots honors occupancy", () => {
+  it("splits ranges on Booked, not just on Available", () => {
+    const at = (t: string, booked: boolean): AvailabilitySlot => ({
+      DateTime: `2026-09-02T${t}`,
+      Available: true, // stays true across the booking — the trap
+      Capacity: 1,
+      BookedCount: booked ? 1 : 0,
+      Booked: booked,
+    });
+    const { free, booked } = compressSlots(
+      [at("15:00", false), at("15:30", false), at("16:00", true), at("16:30", true), at("17:00", false)],
+      30,
+    );
+    expect(booked).toEqual([{ from: "2026-09-02T16:00", to: "2026-09-02T17:00" }]);
+    expect(free).toEqual([
+      { from: "2026-09-02T15:00", to: "2026-09-02T16:00" },
+      { from: "2026-09-02T17:00", to: "2026-09-02T17:30" },
+    ]);
   });
 });

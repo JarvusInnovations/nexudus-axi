@@ -27,7 +27,7 @@ Bookable resources and their availability. Contract: [api/resources](../api/reso
 
 - Defaults: `--date today`, `--days 1`, `--interval 30`. Date forms per [time-and-timezone](../behaviors/time-and-timezone.md).
 - Backed by `GetAvailabilityAtWithUser` using the resource's `UniqueId` (resolved from the same lookup as `rooms view` — the agent never handles the GUID).
-- Output compresses the raw slot list into **contiguous ranges**: `free[N]{from,to}` and `booked[N]{from,to}` in space wall-clock — an agent wants "2:00–5:30 PM is open", not 48 slot rows.
+- Output compresses the raw slot list into **contiguous ranges**: `free[N]{from,to}` and `booked[N]{from,to}` in space wall-clock — an agent wants "2:00–5:30 PM is open", not 48 slot rows. Free/booked is decided by the occupancy rule in [api/resources](../api/resources.md#per-slot-availability), never by the raw `Available` flag.
 - Header: `space:`, `room:`, `date:` (resolved), `timezone:`.
 - Empty/fully-booked days are definitive (`free: none — fully booked on <date>`).
 - Suggestions: `book --room <id> --date <date> --from <time> --to <time>`.

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 depends: [slot-occupancy-fix, booking-time-confirmation]
 specs:
   - specs/architecture.md
@@ -7,6 +7,7 @@ specs:
   - specs/commands/rooms.md
   - specs/behaviors/time-and-timezone.md
 issues: []
+pr: 19
 ---
 
 # Plan: Spec drift sweep after the timezone/occupancy fixes
@@ -34,11 +35,11 @@ in place. No code moves; `check`, `docs:check` and the suite must stay green to 
 
 ## Validation
 
-- [ ] No spec still describes id recovery by matching the requested window.
-- [ ] `rooms slots` and `rooms free` both point at the single occupancy rule.
-- [ ] The time behavior spec states the offset consequence and links the API finding.
-- [ ] `architecture.md`'s module map matches `ls src/**` exactly, including booking/mybookings/profile/stub.
-- [ ] `bun run check`, `docs:check`, and the full suite pass unchanged.
+- [x] No spec still describes id recovery by matching the requested window.
+- [x] `rooms slots` and `rooms free` both point at the single occupancy rule.
+- [x] The time behavior spec states the offset consequence and links the API finding.
+- [x] `architecture.md`'s module map matches `ls src/**` exactly, including booking/mybookings/profile/stub.
+- [x] `bun run check`, `docs:check`, and the full suite pass unchanged.
 
 ## Risks / unknowns
 
@@ -48,8 +49,16 @@ in place. No code moves; `check`, `docs:check` and the suite must stay green to 
 
 ## Notes
 
-_(closeout)_
+- The sharpest finding was `api/bookings.md` still prescribing **window-matching** for id recovery: not
+  merely stale, but the precise failure mode `booking-time-confirmation` existed to remove, left sitting in
+  the API spec where an implementer would most plausibly look first.
+- Root cause is process, not carelessness: three fixes landed in one session, each updating the spec it
+  *owned* while leaving sibling specs describing the old behavior. Worth a `grep` for superseded phrasings
+  whenever a plan changes a mechanism other specs reference.
+- The architecture module map had drifted furthest (four modules absent) because no single plan owns it —
+  every plan adds to it and none is responsible for it.
 
 ## Follow-ups
 
-_(closeout)_
+- **Consider:** a `/audit-spec-drift` pass is now cheap to run and would catch this class automatically;
+  worth doing after any multi-plan day rather than relying on a targeted grep.

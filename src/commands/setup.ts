@@ -40,15 +40,67 @@ interface HookSettings {
   hooks?: { SessionStart?: HookGroup[] };
 }
 
-function readJson(path: string): Record<string, unknown> | null {
-  if (!existsSync(path)) return null;
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** A target file as the agent would see it: absent, parsed, or a problem to report — never silently "absent". */
+type TargetRead =
+  | { state: "absent" }
+  | { state: "ok"; json: Record<string, unknown> }
+  | { state: "error"; message: string };
+
+function readTarget(path: string): TargetRead {
+  if (!existsSync(path)) return { state: "absent" };
+  let text: string;
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
-  } catch {
-    return null;
+    text = readFileSync(path, "utf-8");
+  } catch (err) {
+    return { state: "error", message: `cannot read: ${errMsg(err)}` };
+  }
+  try {
+    const json = JSON.parse(text) as unknown;
+    if (!json || typeof json !== "object" || Array.isArray(json)) {
+      return { state: "error", message: "not a JSON object" };
+    }
+    return { state: "ok", json: json as Record<string, unknown> };
+  } catch (err) {
+    return { state: "error", message: `not valid JSON: ${errMsg(err)}` };
   }
 }
 
+/** Codex reads `[features] hooks` from the user's config.toml whatever the hook's scope (as the SDK writes it). */
+function codexConfigPath(): string {
+  return join(homedir(), ".codex", "config.toml");
+}
+
+/** Problem text when Codex would not run its hook, or undefined when `[features] hooks = true`. */
+function codexFeatureProblem(): string | undefined {
+  const path = codexConfigPath();
+  if (!existsSync(path)) return `${path} is missing \`[features] hooks = true\` — Codex will not run hooks`;
+  let text: string;
+  try {
+    text = readFileSync(path, "utf-8");
+  } catch (err) {
+    return `${path}: cannot read: ${errMsg(err)}`;
+  }
+  let section = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    const header = line.match(/^\[([^\]]+)\]$/);
+    if (header) {
+      section = header[1]!.trim();
+      continue;
+    }
+    const kv = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/);
+    if (!kv) continue;
+    const key = section ? `${section}.${kv[1]}` : kv[1]!;
+    if (key === "features.hooks") {
+      return kv[2]!.trim() === "true" ? undefined : `${path}: \`[features] hooks\` is ${kv[2]!.trim()} — Codex will not run hooks`;
+    }
+  }
+  return `${path} is missing \`[features] hooks = true\` — Codex will not run hooks`;
+}
 function sessionStartGroups(json: Record<string, unknown> | null): HookGroup[] {
   const hooks = (json as HookSettings | null)?.hooks;
   return hooks?.SessionStart ?? [];
@@ -119,20 +171,21 @@ interface StatusRow {
   installed: boolean;
   command: string;
   current: boolean;
+  /** Why the hook can't be confirmed or won't run — rendered in `problems[]`, never folded into "not installed". */
+  problem?: string;
 }
 
 function opencodeStatus(scope: SessionStartHookScope): StatusRow {
   const path = opencodePluginPath(scope);
-  if (!existsSync(path)) return { agent: "OpenCode", installed: false, command: "", current: false };
-  let content = "";
+  const none = { agent: "OpenCode", installed: false, command: "", current: false };
+  if (!existsSync(path)) return none;
+  let content: string;
   try {
     content = readFileSync(path, "utf-8");
-  } catch {
-    return { agent: "OpenCode", installed: false, command: "", current: false };
+  } catch (err) {
+    return { ...none, problem: `${path}: cannot read: ${errMsg(err)}` };
   }
-  if (!content.includes(OPENCODE_MANAGED_MARKER)) {
-    return { agent: "OpenCode", installed: false, command: "", current: false };
-  }
+  if (!content.includes(OPENCODE_MANAGED_MARKER)) return none;
   const command = opencodeCommand(content);
   return { agent: "OpenCode", installed: true, command, current: hookPointsAtCurrentExecutable(command) };
 }
@@ -180,14 +233,25 @@ function hookPointsAtCurrentExecutable(command: string): boolean {
 
 function statusRows(scope: SessionStartHookScope): StatusRow[] {
   const rows: StatusRow[] = jsonTargets(scope).map((t) => {
-    const group = sessionStartGroups(readJson(t.path)).find(isOurs);
+    const read = readTarget(t.path);
+    if (read.state === "error") {
+      return { agent: t.agent, installed: false, command: "", current: false, problem: `${t.path}: ${read.message}` };
+    }
+    const group = sessionStartGroups(read.state === "ok" ? read.json : null).find(isOurs);
     const command = ourCommand(group);
-    return { agent: t.agent, installed: !!group, command, current: hookPointsAtCurrentExecutable(command) };
+    const row: StatusRow = { agent: t.agent, installed: !!group, command, current: hookPointsAtCurrentExecutable(command) };
+    if (t.agent === "Codex" && row.installed) {
+      const problem = codexFeatureProblem();
+      if (problem) {
+        row.current = false;
+        row.problem = problem;
+      }
+    }
+    return row;
   });
   rows.push(opencodeStatus(scope));
   return rows;
 }
-
 const STATUS_SCHEMA = [
   { name: "agent", extract: (i: Record<string, unknown>) => i.agent },
   { name: "installed", extract: (i: Record<string, unknown>) => i.installed },
@@ -195,11 +259,21 @@ const STATUS_SCHEMA = [
   { name: "current", extract: (i: Record<string, unknown>) => i.current },
 ];
 
+const PROBLEM_SCHEMA = [
+  { name: "agent", extract: (i: Record<string, unknown>) => i.agent },
+  { name: "problem", extract: (i: Record<string, unknown>) => i.problem },
+];
+
 function renderStatus(scope: SessionStartHookScope, suggestions: string[]): string {
+  const rows = statusRows(scope);
+  const problems = rows.filter((r) => r.problem);
   const blocks = [
     renderObject({ scope, root: scopeRoot(scope) }),
-    renderList("hooks", statusRows(scope) as unknown as Array<Record<string, unknown>>, STATUS_SCHEMA),
+    renderList("hooks", rows as unknown as Array<Record<string, unknown>>, STATUS_SCHEMA),
   ];
+  if (problems.length > 0) {
+    blocks.push(renderList("problems", problems as unknown as Array<Record<string, unknown>>, PROBLEM_SCHEMA));
+  }
   if (isDisabled()) {
     blocks.push(renderObject({ note: "NEXUDUS_AXI_DISABLE_HOOKS=1 is set — installs are suppressed" }));
   }
@@ -209,7 +283,7 @@ function renderStatus(scope: SessionStartHookScope, suggestions: string[]): stri
 
 /** Contents of every file the installer may touch, to detect a no-op run. */
 function snapshot(scope: SessionStartHookScope): string[] {
-  const paths = [...jsonTargets(scope).map((t) => t.path), opencodePluginPath(scope)];
+  const paths = [...jsonTargets(scope).map((t) => t.path), opencodePluginPath(scope), codexConfigPath()];
   return paths.map((p) => {
     try {
       return existsSync(p) ? readFileSync(p, "utf-8") : "<absent>";
@@ -244,16 +318,20 @@ function installHooks(scope: SessionStartHookScope): string {
   });
   const rows = statusRows(scope);
   const missing = rows.filter((r) => !r.installed || !r.current);
-  // A write the SDK reports as failed is a failed setup, never a warning on
-  // exit 0 (AXI §6: fail closed).
-  if (errors.length > 0) {
+  const good = rows.filter((r) => r.installed && r.current);
+  const problems = rows.flatMap((r) => (r.problem ? [r.problem] : []));
+  const rerun = `nexudus-axi setup hooks${scope === "project" ? " --scope project" : ""}`;
+  const partial = [
+    ...(good.length > 0 ? [`Installed and current: ${good.map((r) => r.agent).join(", ")}`] : []),
+    ...(missing.length > 0 ? [`Not installed or not current: ${missing.map((r) => r.agent).join(", ")}`] : []),
+  ];
+  // A write the SDK reports as failed, or a target it can't confirm, is a
+  // failed setup — never a warning on exit 0 (AXI §6: fail closed).
+  if (errors.length > 0 || problems.length > 0) {
     throw new AxiError(
-      `session hook install failed at ${scope} scope: ${errors.join("; ")}`,
+      `session hook install failed at ${scope} scope: ${[...errors, ...problems.filter((p) => !errors.some((e) => e.includes(p) || p.includes(e)))].join("; ")}`,
       "SETUP_FAILED",
-      [
-        ...(missing.length > 0 ? [`Not installed or not current: ${missing.map((r) => r.agent).join(", ")}`] : []),
-        `Fix the file permissions named above, then run \`nexudus-axi setup hooks${scope === "project" ? " --scope project" : ""}\` again`,
-      ],
+      [...partial, `Fix the file named above (its permissions, or its JSON/TOML content), then run \`${rerun}\` again`],
     );
   }
   // The SDK declines (silently) to register an entrypoint it doesn't
@@ -312,10 +390,17 @@ function hookInstall(scope: SessionStartHookScope): string {
 
 function hookUninstall(scope: SessionStartHookScope): string {
   const cleared: string[] = [];
+  const failures: string[] = [];
 
   for (const t of jsonTargets(scope)) {
-    const json = readJson(t.path);
-    if (!json) continue;
+    const read = readTarget(t.path);
+    if (read.state === "absent") continue;
+    // A file we can't read or parse may still hold our hook: report it, never skip it.
+    if (read.state === "error") {
+      failures.push(`${t.path}: ${read.message}`);
+      continue;
+    }
+    const json = read.json;
     const groups = sessionStartGroups(json);
     const kept = groups.filter((g) => !isOurs(g));
     if (kept.length === groups.length) continue; // nothing ours here
@@ -325,42 +410,46 @@ function hookUninstall(scope: SessionStartHookScope): string {
       writeFileSync(t.path, `${JSON.stringify(json, null, 2)}\n`, "utf-8");
       cleared.push(t.agent);
     } catch (err) {
-      throw new AxiError(
-        `Failed to update ${t.path}: ${err instanceof Error ? err.message : String(err)}`,
-        "IO_ERROR",
-        ["Check file permissions and retry"],
-      );
+      failures.push(`${t.path}: cannot write: ${errMsg(err)}`);
     }
   }
 
   const pluginPath = opencodePluginPath(scope);
   if (existsSync(pluginPath)) {
-    let content = "";
+    let content: string | undefined;
     try {
       content = readFileSync(pluginPath, "utf-8");
-    } catch {
-      content = "";
+    } catch (err) {
+      failures.push(`${pluginPath}: cannot read: ${errMsg(err)}`);
     }
-    if (content.includes(OPENCODE_MANAGED_MARKER)) {
+    if (content?.includes(OPENCODE_MANAGED_MARKER)) {
       try {
         rmSync(pluginPath);
         cleared.push("OpenCode");
       } catch (err) {
-        throw new AxiError(
-          `Failed to remove ${pluginPath}: ${err instanceof Error ? err.message : String(err)}`,
-          "IO_ERROR",
-          ["Check file permissions and retry"],
-        );
+        failures.push(`${pluginPath}: cannot remove: ${errMsg(err)}`);
       }
     }
   }
 
+  if (failures.length > 0) {
+    throw new AxiError(
+      `session hook uninstall incomplete at ${scope} scope: ${failures.join("; ")}`,
+      "IO_ERROR",
+      [
+        cleared.length > 0 ? `Removed from: ${cleared.join(", ")}` : "Nothing was removed",
+        `Fix the file named above (its permissions or JSON), then run \`nexudus-axi setup hooks uninstall${scope === "project" ? " --scope project" : ""}\` again`,
+      ],
+    );
+  }
   if (cleared.length === 0) {
     return renderObject({ status: `no nexudus-axi session hook was installed at ${scope} scope (no-op)` });
   }
-  return renderObject({ status: `removed from ${cleared.join(", ")} (${scope} scope)` });
+  return joinBlocks(
+    renderObject({ status: `removed from ${cleared.join(", ")} (${scope} scope)` }),
+    renderHelp([`Run \`nexudus-axi setup hooks status${scope === "project" ? " --scope project" : ""}\` to confirm`]),
+  );
 }
-
 export async function setupCommand(args: string[]) {
   const group = args[0];
   if (group !== "hooks") {
@@ -400,6 +489,14 @@ export function hookDoctorCheck(): Check {
     return { check: "hooks", status: "skipped", detail: "NEXUDUS_AXI_DISABLE_HOOKS=1 is set" };
   }
   const rows = statusRows("user");
+  const problems = rows.filter((r) => r.problem);
+  if (problems.length > 0) {
+    return {
+      check: "hooks",
+      status: "fail",
+      detail: `${problems.map((r) => `${r.agent}: ${r.problem}`).join("; ")} — fix it, then run \`nexudus-axi setup hooks\``,
+    };
+  }
   const installed = rows.filter((r) => r.installed);
   if (installed.length === 0) {
     // The hook is optional (the installable skill is an alternative), so its

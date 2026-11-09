@@ -40,7 +40,7 @@ None of the channels is a prompt — the command never blocks on a TTY (AXI §6)
 2. **token** — `/en/profile?_resource=Coworker` succeeds? (auto-refresh exercised and reported if it fired)
 3. **profile cache** — coworker id + business id + timezone cached? (missing timezone → remediation: `auth login --timezone`)
 4. **resources read** — `/en/publicresources?_depth=3` returns ≥1 resource? (the canary for portal-contract drift, per [Reverse-engineered surface](../principles.md#reverse-engineered-surface-specd-honestly))
-5. **hooks** — SessionStart hook installed and current? The hook is optional (the installable skill is an alternative), so **not installed is `skipped`, not `fail`**; an installed hook pointing at a different executable is `fail` (remediation: `setup hooks`).
+5. **hooks** — SessionStart hook installed and current? The hook is optional (the installable skill is an alternative), so **not installed is `skipped`, not `fail`**; an installed hook pointing at a different executable, an unreadable or unparseable target file, or Codex's `[features] hooks` flag being off is `fail` (remediation named per problem).
 
 Exit 0 all-pass, else 1.
 

@@ -43,7 +43,12 @@ export async function fetchResources(active: ActiveSpace): Promise<Resource[]> {
   const res = await nexudusRequest<PublicResourcesResponse>(active, "/en/publicresources", {
     query: { _depth: 3 },
   });
-  return (res.Resources ?? [])
+  if (!Array.isArray(res.Resources)) {
+    throw new AxiError("The resources response carried no resource list", "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to check the portal connection",
+    ]);
+  }
+  return res.Resources
     .filter((r): r is Resource => typeof r?.Id === "number" && typeof r?.Name === "string")
     .filter((r) => r.Visible !== false)
     .sort((a, b) => (a.DisplayOrder ?? 0) - (b.DisplayOrder ?? 0));

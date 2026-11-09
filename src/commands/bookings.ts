@@ -79,14 +79,17 @@ async function bookingsList(parsed: Parsed): Promise<string> {
   }
 
   const rows = await fetchMyBookings(active, formatWallDate(from), formatWallDate(to));
-  const unpaid = await fetchUnpaidCounts(active).catch(() => ({}) as { BookingsToPay?: number });
+  const unpaid = await fetchUnpaidCounts(active).then(
+    (u) => (u.BookingsToPay ? `${u.BookingsToPay} booking(s) awaiting payment — see the portal` : undefined),
+    (err: unknown) => unknownFee(err),
+  );
 
   return renderListResponse({
     header: compact({
       space: active.space,
       window: label,
       timezone: zone ?? "(machine zone)",
-      ...(unpaid.BookingsToPay ? { unpaid: `${unpaid.BookingsToPay} booking(s) awaiting payment — see the portal` } : {}),
+      ...(unpaid ? { unpaid } : {}),
     }),
     name: "bookings",
     items: rows as unknown as Array<Record<string, unknown>>,

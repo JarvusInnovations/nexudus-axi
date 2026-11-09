@@ -1,5 +1,7 @@
 import type { ActiveSpace } from "../config.js";
+import { AxiError } from "axi-sdk-js";
 import { nexudusRequest } from "./client.js";
+import { fetchProfile } from "./profile.js";
 
 /**
  * My-bookings reads per specs/api/bookings.md § Reading my bookings.
@@ -37,19 +39,35 @@ export function splitWallclock(value: string): { date: string; time: string } {
   return m ? { date: m[1]!, time: m[2]! } : { date: value, time: "" };
 }
 
+/**
+ * The caller's coworker id: cached, else read live (env-token mode has no
+ * cache). Never undefined — an absent id would filter every booking away.
+ */
+export async function resolveCoworkerId(active: ActiveSpace): Promise<number> {
+  const cached = active.stored?.profile_cache?.coworker_id;
+  if (cached !== undefined && cached !== null) return cached;
+  const profile = await fetchProfile(active, active.stored?.profile_cache?.timezone);
+  return profile.coworker_id;
+}
+
 /** Fetch the caller's own bookings between two wall-clock dates (inclusive). */
 export async function fetchMyBookings(
   active: ActiveSpace,
   fromDate: string,
   toDate: string,
 ): Promise<CalendarBookingRow[]> {
-  const coworkerId = active.stored?.profile_cache?.coworker_id;
+  const coworkerId = await resolveCoworkerId(active);
   const rows = await nexudusRequest<CalendarBookingRow[]>(active, "/en/bookings/fullCalendarBookings", {
     query: { start: fromDate, end: toDate },
   });
-  return (Array.isArray(rows) ? rows : [])
+  if (!Array.isArray(rows)) {
+    throw new AxiError("The bookings calendar response was not a list", "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to check the portal connection",
+    ]);
+  }
+  return rows
     // String-tolerant: the feed serializes coworkerId as a string.
-    .filter((r) => coworkerId !== undefined && String(r.coworkerId) === String(coworkerId))
+    .filter((r) => String(r.coworkerId) === String(coworkerId))
     // The server honors the window loosely — enforce it client-side.
     .filter((r) => {
       const day = splitWallclock(r.start).date;

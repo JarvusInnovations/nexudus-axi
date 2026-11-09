@@ -329,7 +329,7 @@ function installHooks(scope: SessionStartHookScope): string {
   // failed setup — never a warning on exit 0 (AXI §6: fail closed).
   if (errors.length > 0 || problems.length > 0) {
     throw new AxiError(
-      `session hook install failed at ${scope} scope: ${[...errors, ...problems.filter((p) => !errors.some((e) => e.includes(p) || p.includes(e)))].join("; ")}`,
+      `session hook install failed at ${scope} scope: ${(errors.length > 0 ? errors : problems).join("; ")}`,
       "SETUP_FAILED",
       [...partial, `Fix the file named above (its permissions, or its JSON/TOML content), then run \`${rerun}\` again`],
     );
@@ -356,7 +356,12 @@ function installHooks(scope: SessionStartHookScope): string {
  */
 export function hookSummary(): string {
   if (isDisabled()) return "disabled (NEXUDUS_AXI_DISABLE_HOOKS=1)";
-  const installed = statusRows("user").filter((r) => r.installed);
+  const rows = statusRows("user");
+  const problems = rows.filter((r) => r.problem);
+  if (problems.length > 0) {
+    return `problem — ${problems.map((r) => `${r.agent}: ${r.problem}`).join("; ")} — run \`nexudus-axi setup hooks status\``;
+  }
+  const installed = rows.filter((r) => r.installed);
   if (installed.length === 0) {
     return "not installed — run `nexudus-axi setup hooks` to load the home view at session start (optional)";
   }

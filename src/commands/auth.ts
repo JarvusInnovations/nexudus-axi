@@ -18,7 +18,7 @@ import { AUTH_FLAGS, bool, parseSubcommand, requirePositional, str, type Parsed 
 import { passwordGrant } from "../nexudus/token.js";
 import { fetchProfile } from "../nexudus/profile.js";
 import { joinBlocks, renderHelp, renderList, renderObject } from "../output/index.js";
-import { installHooks } from "./setup.js";
+import { hookSummary } from "./setup.js";
 
 /** `auth login|status|use|logout` — see `specs/commands/auth.md`. */
 
@@ -144,7 +144,7 @@ async function authLogin(parsed: Parsed) {
     business: profile.business_name,
     timezone: profile.timezone ?? "(unset — using the machine zone; pass --timezone <iana> to pin the space's)",
     default: getDefaultSpace() === slug,
-    session_hook: installHooks(),
+    session_hook: hookSummary(),
   };
   return renderObject(output);
 }

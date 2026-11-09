@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 depends: [spec-drift-sweep]
 specs:
   - specs/architecture.md
@@ -8,6 +8,7 @@ specs:
   - specs/commands/home.md
   - specs/commands/setup.md
 issues: []
+pr: 21
 ---
 
 # Plan: Close the AXI conformance gaps found in catalog admission review
@@ -47,19 +48,35 @@ AXI requires no gate).
 
 ## Validation
 
-- [ ] Unit: extra positionals → USAGE naming the usage; variadic `rooms favorites` and `--help` unaffected;
+- [x] Unit: extra positionals → USAGE naming the usage; variadic `rooms favorites` and `--help` unaffected;
       `auth logout <slug>` rejected instead of logging out of the default.
-- [ ] Unit: home with a 500 on bookings or credits renders `unavailable (...)` and the `doctor` hint, exit 0.
-- [ ] Unit: `auth login` writes no hook files under a temp HOME and reports `not installed`.
-- [ ] Unit: repeat project-scope `setup hooks` reports no-op with files unchanged; a declined entrypoint
+- [x] Unit: home with a 500 on bookings or credits renders `unavailable (...)` and the `doctor` hint, exit 0.
+- [x] Unit: `auth login` writes no hook files under a temp HOME and reports `not installed`.
+- [x] Unit: repeat project-scope `setup hooks` reports no-op with files unchanged; a declined entrypoint
       fails `SETUP_FAILED`; doctor's missing-hook check is `skipped`.
-- [ ] Unit: repeat `book` of my exact window → existing id, `(no-op)`, no CreateInvoice; someone else's
+- [x] Unit: repeat `book` of my exact window → existing id, `(no-op)`, no CreateInvoice; someone else's
       booking or my overlapping different window → `UNAVAILABLE`.
-- [ ] Built CLI under a temp HOME: `--version`, `doctor extra`, `auth logout acme`, `rooms view a b`,
+- [x] Built CLI under a temp HOME: `--version`, `doctor extra`, `auth logout acme`, `rooms view a b`,
       `setup hooks` twice, `doctor` hooks row, `setup hooks uninstall`.
 - [ ] Live: re-run a `book` that just succeeded on a real space → reports the existing booking, exit 0.
+      *(Deferred — see Follow-ups.)*
 
 ## Risks / unknowns
 
 - The repeat-book no-op matches on the calendar feed's `start`/`end` wall-clock strings; if the feed ever
   rounds or shifts stored times, an identical re-run would fall back to `UNAVAILABLE` (safe, just not a no-op).
+
+## Notes
+
+- **The SDK declines silently.** `installSessionStartHooks` only registers a `dist/bin/<name>.js` (or bare
+  binary) entrypoint and returns without a word otherwise, so a file-snapshot no-op check alone would have
+  reported "already installed" for a hook that was never written. `setup hooks` now re-reads status after
+  installing. Tests pose as an installed entrypoint by pointing `process.argv[1]` at a temp `dist/bin` file.
+- `--version` from a source checkout still prints the committed `package.json` version (0.1.0); the release
+  workflow stamps the real version before publishing, per `specs/architecture.md`.
+
+## Follow-ups
+
+- **Deferred:** the live repeat-`book` check needs a real booking on a real space (then cancelling it), so it
+  stays with the maintainer: book a credit-covered slot, re-run the identical command, expect `(no-op)` and
+  the same id, then `bookings cancel <id>`.

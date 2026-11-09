@@ -11,7 +11,7 @@ Create a booking — the flagship mutation. Contract: [api/bookings](../api/book
 Flow (one invocation, no prompts):
 
 1. Resolve the room (id or name, as `rooms view`) and the wall-clock window ([time-and-timezone](../behaviors/time-and-timezone.md)).
-2. **Price preview** via `PreviewInvoice`: cost in dollars, credits consumed, or both.
+2. **Price preview** via `PreviewInvoice`: cost in dollars, credits consumed, or both. A preview without a numeric `TotalAmount` (including an empty body) is `UNEXPECTED_RESPONSE` and nothing is committed — an unknown price is never read as free.
 3. `--dry-run`: stop here. Output `would_book:` with room, window, `total:`, `credits_used:`, and availability — exit 0.
 4. Commit via the basket's `CreateInvoice?createZeroValueInvoice=true` (the member path — see [api/bookings § Write endpoints](../api/bookings.md#write-endpoints-verified-live-2026-09-01)) with a fresh client-generated `UniqueId` and `ChargeNow: true`. Success is an empty 200 and returns no id.
 5. **Confirm from the server, never echo the request.** Snapshot the caller's bookings for the resource across `date ± 1 day` *before* the commit, refetch after, and identify the new row by set difference on booking id — deliberately not by matching the requested window, since a shifted booking must still be found (and could land on an adjacent day). If the *before* snapshot cannot be read, refuse before committing (`CONFIRMATION_UNAVAILABLE`, exit 1, nothing booked): without it an existing booking could be mistaken for the new one.

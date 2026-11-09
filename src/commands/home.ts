@@ -62,6 +62,9 @@ async function creditLines(active: ReturnType<typeof resolveActiveSpace>): Promi
     },
   });
 
+  if (benefits.Personal == null && benefits.Team == null) {
+    throw new AxiError("The benefits response carried neither personal nor team benefits", "UNEXPECTED_RESPONSE", []);
+  }
   const rows = [
     ...(benefits.Personal?.BookingCredits ?? []),
     ...(benefits.Team?.BookingCredits ?? []),

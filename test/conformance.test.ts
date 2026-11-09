@@ -355,6 +355,7 @@ describe("cost and confirmation reads fail closed", () => {
         return json([{ id: 777, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
       }
       if (url.toLowerCase().includes("cancellationfee")) return json({ Message: "boom" }, 500);
+      if (url.includes("deletejson")) return json({ Status: 200 });
       return json({ WasSuccessful: true });
     });
     const { bookingsCommand } = await import("../src/commands/bookings.js");
@@ -407,6 +408,7 @@ describe("every read fails closed (v0.3.2 review)", () => {
         return json([{ id: 42, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
       }
       if (url.toLowerCase().includes("cancellationfee")) return json({ hasCancellationFee: false, cancellationFee: null });
+      if (url.includes("deletejson")) return json({ Status: 200 });
       return json({ WasSuccessful: true });
     });
     const { bookingsCommand } = await import("../src/commands/bookings.js");
@@ -459,6 +461,107 @@ describe("every read fails closed (v0.3.2 review)", () => {
     });
     const { bookingsCommand } = await import("../src/commands/bookings.js");
     expect(await bookingsCommand(["list"])).toMatch(/unpaid: "?unknown \(/);
+  });
+});
+
+describe("responses fail closed: no price, fee, status or benefits is read as 0/none/success (v0.3.3 review)", () => {
+  const RES = { Resources: [{ Id: ROOM_ID, UniqueId: "guid-31", Name: "Call Room", ResourceTypeName: "Phone Rooms", Allocation: 2, Visible: true, DisplayOrder: 1 }] };
+  function freeGrid(day: string) {
+    const slots = [];
+    for (let m = 0; m < 24 * 60; m += 15) {
+      slots.push({ DateTime: `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`, Available: true });
+    }
+    return { AvailableSlots: slots };
+  }
+  const soon = () => new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+
+  it("an empty preview never books: UNEXPECTED_RESPONSE before CreateInvoice", async () => {
+    writeStoredSpace(stored());
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("publicresources")) return json(RES);
+      if (url.includes("GetAvailabilityAtWithUser")) return json(freeGrid("2026-09-05"));
+      if (url.includes("fullCalendarBookings")) return json([]);
+      if (url.includes("PreviewInvoice")) return new Response("", { status: 200 });
+      return new Response("", { status: 200 });
+    });
+    const { bookCommand } = await import("../src/commands/book.js");
+    await expect(bookCommand(["--room", "Call Room", "--date", "2026-09-05", "--from", "15:00", "--to", "+30m"])).rejects.toMatchObject({
+      code: "UNEXPECTED_RESPONSE",
+    });
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("CreateInvoice"))).toBe(false);
+  });
+
+  it("a preview body without TotalAmount never books either", async () => {
+    writeStoredSpace(stored());
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("publicresources")) return json(RES);
+      if (url.includes("GetAvailabilityAtWithUser")) return json(freeGrid("2026-09-05"));
+      if (url.includes("fullCalendarBookings")) return json([]);
+      if (url.includes("PreviewInvoice")) return json({ WasSuccessful: true });
+      return new Response("", { status: 200 });
+    });
+    const { bookCommand } = await import("../src/commands/book.js");
+    await expect(bookCommand(["--room", "Call Room", "--date", "2026-09-05", "--from", "15:00", "--to", "+30m", "--dry-run"])).rejects.toMatchObject({
+      code: "UNEXPECTED_RESPONSE",
+    });
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("CreateInvoice"))).toBe(false);
+  });
+
+  it("a fee response without its flag reads unknown, never 0", async () => {
+    writeStoredSpace(stored());
+    const day = soon();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([{ id: 5, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      if (url.toLowerCase().includes("cancellationfee")) return json({});
+      if (url.includes("deletejson")) return json({ Status: 200 });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    const out = await bookingsCommand(["cancel", "5"]);
+    expect(out).toMatch(/fee: "?unknown \(/);
+  });
+
+  it("a cancel answered without a status that leaves the booking in place is CANCEL_UNCONFIRMED", async () => {
+    writeStoredSpace(stored());
+    const day = soon();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([{ id: 6, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      if (url.toLowerCase().includes("cancellationfee")) return json({ hasCancellationFee: false, cancellationFee: null });
+      if (url.includes("deletejson")) return new Response("", { status: 200 });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    await expect(bookingsCommand(["cancel", "6"])).rejects.toMatchObject({ code: "CANCEL_UNCONFIRMED" });
+  });
+
+  it("a booking outside the calendar window that still exists is OUT_OF_WINDOW, not a no-op", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([]);
+      if (url.includes("BookingJson/99")) return json({ Value: { Id: 99, ResourceName: "Call Room" } });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    await expect(bookingsCommand(["cancel", "99"])).rejects.toMatchObject({ code: "OUT_OF_WINDOW" });
+  });
+
+  it("a benefits response with no groups is UNEXPECTED_RESPONSE, not 'no booking credits'", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => json({}));
+    const { creditsCommand } = await import("../src/commands/credits.js");
+    await expect(creditsCommand([])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
+  it("a corrupt token.json is CONFIG_INVALID, not 'not connected'", async () => {
+    writeStoredSpace(stored());
+    const { tokenPath, readStoredSpace } = await import("../src/config.js");
+    writeFileSync(tokenPath("acme"), "{corrupt");
+    expect(() => readStoredSpace("acme")).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }));
   });
 });
 

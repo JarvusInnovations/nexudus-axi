@@ -4,7 +4,9 @@ Create a booking — the flagship mutation. Contract: [api/bookings](../api/book
 
 ## book
 
-`nexudus-axi book --room <room> --date <when> --from <time> --to <time|+dur> [--dry-run] [--space <slug>]`
+`nexudus-axi book --room <room> [--date <when>] --from <time> --to <time|+dur> [--dry-run] [--space <slug>]`
+
+`--date` defaults to `today` in the space's timezone; `--room`, `--from`, `--to` are required.
 
 Flow (one invocation, no prompts):
 
@@ -27,6 +29,7 @@ The happy path reports `confirmed: true` and exits 0. `--dry-run` has nothing to
 Failure modes (all structured, per [Translate errors](../principles.md#translate-errors-never-leak-raw-api-noise)):
 
 - Window unavailable → `UNAVAILABLE` naming the conflicting range, suggesting `rooms slots <room> --date <date>`.
+  - **Except a repeat of a booking that already landed:** when the conflict is the caller's own booking of the same room for exactly the requested window, report that booking (`booked:`, `id:`, window, `status: already booked by you for this window (no-op)`) and exit 0 without pricing or committing. Any other overlap — someone else's booking, or the caller's booking of a different window — stays `UNAVAILABLE`. If the caller's bookings can't be read, fall through to `UNAVAILABLE`; never guess a no-op.
 - Booking-rule violation (too long/short/late/far ahead) → the resource limit named.
 - Payment required beyond credits and the API refuses → `PAYMENT_REQUIRED` explaining v1 books credit-covered/zero-value reservations and pointing at the portal for card checkout.
 - Required custom fields on the resource → `CUSTOM_FIELDS_REQUIRED` naming them (v1 does not submit custom fields).
@@ -37,4 +40,4 @@ Suggestions on success: `bookings` (see it in context), `bookings cancel <id>` (
 
 ## Principles
 
-**Inherited** — [Preview before commit, but never prompt](../principles.md#preview-before-commit-but-never-prompt); [Idempotent, non-interactive mutations](../principles.md#idempotent-non-interactive-mutations) — note `book` itself is **not** idempotent (double-invoking books twice); the tool must not pretend otherwise, and the durable `UniqueId` per invocation keeps retries within one invocation from double-booking.
+**Inherited** — [Preview before commit, but never prompt](../principles.md#preview-before-commit-but-never-prompt); [Idempotent, non-interactive mutations](../principles.md#idempotent-non-interactive-mutations) — re-running an identical `book` after it succeeded is a no-op that reports the existing booking (the availability pre-check sees the caller's own booking); the durable `UniqueId` per invocation keeps retries within one invocation from double-booking. Two different windows are two bookings — the tool never merges them.

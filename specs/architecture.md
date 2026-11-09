@@ -13,11 +13,12 @@
 Follows calendly-axi's shape (which follows harvest-axi + remarkable-axi):
 
 ```
-bin/nexudus-axi.ts         # shebang entry → src/cli.ts main()
+bin/nexudus-axi.ts         # shebang entry: bare --version via axi-sdk-js/fast-path, else lazy-imports src/cli.ts main()
 src/
 ├── cli.ts                 # runAxiCli wiring, formatError (USAGE/UNKNOWN_FLAG/VALIDATION_ERROR → exit 2;
 │                          #   unexpected throws wrapped as INTERNAL_ERROR — no stack trace on stdout)
-├── flags.ts               # declared per-command flag sets; unknown flags rejected with valid set inlined;
+├── flags.ts               # declared per-command flag sets + positional counts; unknown flags and extra
+│                          #   positionals rejected (UNKNOWN_FLAG / USAGE) with the valid set or usage inlined;
 │                          #   --space is an always-allowed global (parsed before command dispatch)
 ├── reference.ts           # COMMAND_GROUPS: single source for top-level help, per-command --help, SKILL.md
 ├── version.ts             # package version at runtime (no build stamping)

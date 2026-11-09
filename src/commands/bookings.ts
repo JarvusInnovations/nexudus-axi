@@ -225,6 +225,16 @@ async function bookingsCancel(parsed: Parsed): Promise<string> {
   }
 
   const feeRead = await fetchCancellationFee(active, id).then((r) => r.fee as number | string, unknownFee);
+  // A fee is never incurred implicitly: a non-zero or unreadable fee needs --accept-fee.
+  if ((typeof feeRead === "string" || feeRead > 0) && !bool(parsed, "--accept-fee")) {
+    throw new AxiError(
+      typeof feeRead === "string"
+        ? `The cancellation fee for booking ${id} could not be read (${feeRead}) — nothing was cancelled`
+        : `Cancelling booking ${id} now incurs a ${feeRead.toFixed(2)} late-cancellation fee — nothing was cancelled`,
+      "FEE_NOT_ACCEPTED",
+      [`Run \`nexudus-axi bookings cancel ${id} --accept-fee\` to cancel anyway`, `Run \`nexudus-axi bookings view ${id}\` for the booking's details`],
+    );
+  }
 
   try {
     await cancelBooking(active, id); // envelope failures throw inside

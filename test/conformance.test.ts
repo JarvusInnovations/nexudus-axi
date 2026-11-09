@@ -359,7 +359,7 @@ describe("cost and confirmation reads fail closed", () => {
       return json({ WasSuccessful: true });
     });
     const { bookingsCommand } = await import("../src/commands/bookings.js");
-    const out = await bookingsCommand(["cancel", "777"]);
+    const out = await bookingsCommand(["cancel", "777", "--accept-fee"]);
     expect(out).toMatch(/fee: "?unknown \(/);
     expect(out).not.toContain("0.00");
   });
@@ -520,7 +520,7 @@ describe("responses fail closed: no price, fee, status or benefits is read as 0/
       return json({});
     });
     const { bookingsCommand } = await import("../src/commands/bookings.js");
-    const out = await bookingsCommand(["cancel", "5"]);
+    const out = await bookingsCommand(["cancel", "5", "--accept-fee"]);
     expect(out).toMatch(/fee: "?unknown \(/);
   });
 
@@ -574,6 +574,41 @@ describe("responses fail closed: no price, fee, status or benefits is read as 0/
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => json({ Personal: {} }));
     const { creditsCommand } = await import("../src/commands/credits.js");
     await expect(creditsCommand([])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
+  it("a non-zero late fee is never incurred implicitly: FEE_NOT_ACCEPTED, no cancel call; --accept-fee cancels", async () => {
+    writeStoredSpace(stored());
+    const day = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([{ id: 7, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      if (url.toLowerCase().includes("cancellationfee")) return json({ hasCancellationFee: true, cancellationFee: 12.5 });
+      if (url.includes("deletejson")) return json({ Status: 200 });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    const err = await bookingsCommand(["cancel", "7"]).then(() => undefined, (e: unknown) => e as AxiError);
+    expect(err?.code).toBe("FEE_NOT_ACCEPTED");
+    expect(err?.message).toContain("12.50");
+    expect(err?.suggestions.join(" ")).toContain("--accept-fee");
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("deletejson"))).toBe(false);
+    const out = await bookingsCommand(["cancel", "7", "--accept-fee"]);
+    expect(out).toContain("cancelled:");
+    expect(out).toContain("12.50");
+  });
+
+  it("a fee-free cancel needs no flag", async () => {
+    writeStoredSpace(stored());
+    const day = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([{ id: 8, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      if (url.toLowerCase().includes("cancellationfee")) return json({ hasCancellationFee: false, cancellationFee: null });
+      if (url.includes("deletejson")) return json({ Status: 200 });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    expect(await bookingsCommand(["cancel", "8"])).toContain("cancelled:");
   });
 
   it("a corrupt token.json is CONFIG_INVALID, not 'not connected'", async () => {

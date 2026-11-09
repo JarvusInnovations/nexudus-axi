@@ -72,11 +72,13 @@ export const COMMAND_GROUPS: CommandGroup[] = [
           "--date <when>   narrow the list to one day",
           "--days <n>      window width from today (default 7)",
           "--all           include past bookings in the window",
+          "--accept-fee    cancel: go ahead when a late-cancellation fee applies (or it can't be read)",
         ],
         examples: [
           "nexudus-axi bookings",
           "nexudus-axi bookings view <id>",
           "nexudus-axi bookings cancel <id>",
+          "nexudus-axi bookings cancel <id> --accept-fee",
         ],
       },
       {

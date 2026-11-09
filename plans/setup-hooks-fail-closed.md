@@ -4,6 +4,7 @@ depends: [axi-conformance]
 specs:
   - specs/commands/setup.md
 issues: []
+pr: 22
 ---
 
 # Plan: `setup hooks` fails closed when the SDK reports a write error

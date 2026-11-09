@@ -1,3 +1,4 @@
+import { AxiError } from "axi-sdk-js";
 import type { ActiveSpace } from "../config.js";
 import { nexudusRequest } from "./client.js";
 
@@ -50,7 +51,12 @@ export async function fetchAvailability(
   const res = await nexudusRequest<AvailabilityResponse>(active, "/en/bookings/GetAvailabilityAtWithUser", {
     query: { days, guid, startTime: startDate, interval: intervalMinutes },
   });
-  return res.AvailableSlots ?? [];
+  if (!Array.isArray(res.AvailableSlots)) {
+    throw new AxiError("The availability response carried no slot list", "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to check the portal connection",
+    ]);
+  }
+  return res.AvailableSlots;
 }
 
 export interface SlotRange {

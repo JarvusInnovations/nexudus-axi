@@ -26,7 +26,7 @@ Every command except `setup`. Output of any command that touched the API names t
 
 ## Preferences
 
-Non-credential, per-space preferences (e.g. favorite rooms) live in `spaces/{slug}/prefs.json` — a sibling of `token.json`, plain JSON `{ favorite_rooms: number[] }`. Credentials and preferences have different lifecycles: **`auth logout` removes `token.json` only; preferences survive logout and apply again on re-login.** An unparseable prefs file falls back to empty, never throws.
+Non-credential, per-space preferences (e.g. favorite rooms) live in `spaces/{slug}/prefs.json` — a sibling of `token.json`, plain JSON `{ favorite_rooms: number[] }`. Credentials and preferences have different lifecycles: **`auth logout` removes `token.json` only; preferences survive logout and apply again on re-login.** An unparseable prefs file (or `config.json`) is `CONFIG_INVALID` (exit 1) naming the file — never read as empty, since a mutation would then overwrite what the user had. The member's coworker id comes from the profile cache, or — when there is none, as with `NEXUDUS_AXI_TOKEN` — from a live `/en/profile` read; never from an absent value that filters every booking away.
 
 - One email may be a member of several spaces; each space login is independent (Nexudus tokens are per-host).
 

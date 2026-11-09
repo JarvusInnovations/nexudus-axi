@@ -150,7 +150,16 @@ export async function bookCommand(args: string[]): Promise<string> {
   //    since a shifted booking must still be found, possibly on another day.
   const probeFrom = formatWallDate(addDays(window.date, -1));
   const probeTo = formatWallDate(addDays(window.date, 1));
-  const before = await fetchMyBookings(active, probeFrom, probeTo).catch(() => []);
+  // Without the before-snapshot an existing booking could pass for the new one,
+  // so refuse before committing rather than guess afterwards (specs/commands/book.md).
+  const before = await fetchMyBookings(active, probeFrom, probeTo).catch((err: unknown) => {
+    const reason = err instanceof AxiError ? `${err.code}: ${err.message}` : err instanceof Error ? err.message : String(err);
+    throw new AxiError(
+      `Could not read your existing bookings, so the new booking could not be confirmed afterwards — nothing was booked (${reason})`,
+      "CONFIRMATION_UNAVAILABLE",
+      ["Run `nexudus-axi doctor` to check the connection, then re-run the same `book` command"],
+    );
+  });
   const knownIds = new Set(before.map((r) => r.id));
 
   await createBooking(active, booking);

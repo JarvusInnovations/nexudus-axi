@@ -12,6 +12,12 @@ import { compact, computed, joinBlocks, renderHelp, renderListResponse, renderOb
 import { cancelBooking, fetchCancellationFee } from "../nexudus/booking.js";
 import { activeSpaceFrom } from "./auth.js";
 
+/** A failed fee lookup is reported as unknown with its error — never a guessed 0 (specs/commands/bookings.md). */
+function unknownFee(err: unknown): string {
+  const reason = err instanceof AxiError ? `${err.code}: ${err.message}` : err instanceof Error ? err.message : String(err);
+  return `unknown (${reason.length > 160 ? `${reason.slice(0, 157)}...` : reason})`;
+}
+
 /** `bookings [list|view|cancel]` — see `specs/commands/bookings.md`. */
 
 export async function bookingsCommand(args: string[]): Promise<string> {
@@ -128,7 +134,10 @@ async function bookingsView(parsed: Parsed): Promise<string> {
     ]);
   }
 
-  const { fee, has } = await fetchCancellationFee(active, Number(idRaw)).catch(() => ({ fee: 0, has: false }));
+  const feeRead = await fetchCancellationFee(active, Number(idRaw)).then(
+    (r) => (r.has ? r.fee : 0) as number | string,
+    unknownFee,
+  );
 
   return joinBlocks(
     renderObject(
@@ -141,7 +150,7 @@ async function bookingsView(parsed: Parsed): Promise<string> {
         tentative: value.Tentative === true ? true : undefined,
         invoiced: value.Invoiced === true ? true : undefined,
         notes: value.Notes || undefined,
-        cancellation_fee: has ? fee : 0,
+        cancellation_fee: feeRead,
       }),
     ),
     renderHelp([
@@ -184,7 +193,7 @@ async function bookingsCancel(parsed: Parsed): Promise<string> {
     });
   }
 
-  const { fee } = await fetchCancellationFee(active, id).catch(() => ({ fee: 0 }));
+  const feeRead = await fetchCancellationFee(active, id).then((r) => r.fee as number | string, unknownFee);
 
   await cancelBooking(active, id); // envelope failures throw inside
 
@@ -195,7 +204,7 @@ async function bookingsCancel(parsed: Parsed): Promise<string> {
         id,
         space: active.space,
         window: `${splitWallclock(row.start).date} ${splitWallclock(row.start).time}–${splitWallclock(row.end).time}`,
-        fee: fee > 0 ? fee.toFixed(2) : "0.00",
+        fee: typeof feeRead === "string" ? feeRead : feeRead > 0 ? feeRead.toFixed(2) : "0.00",
       }),
     ),
     renderHelp(["Run `nexudus-axi bookings` to confirm; credits used by the booking are restored by the space's policy"]),

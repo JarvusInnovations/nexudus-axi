@@ -51,7 +51,7 @@ src/
 
 ## Config & state
 
-Reads fail closed: a local file that can't be parsed, or an API response whose list field isn't a list (`AvailableSlots`, `Resources`, the calendar feed), is a named error — never an empty default that a later command would act on.
+Reads fail closed: an empty 200 body is `UNEXPECTED_RESPONSE` except on the one endpoint verified to answer success that way (`CreateInvoice`); an object response missing the field a decision rests on (a preview's `TotalAmount`, a fee's `hasCancellationFee`, a cancel's `Status`, a benefits response's `Personal`/`Team`) is `UNEXPECTED_RESPONSE`, never a 0/none/success default; a local file that can't be parsed (including `token.json`), or an API response whose list field isn't a list (`AvailableSlots`, `Resources`, the calendar feed), is a named error — never an empty default that a later command would act on.
 
 Per [spaces-and-accounts](behaviors/spaces-and-accounts.md): `$XDG_CONFIG_HOME/nexudus-axi` or `~/.config/nexudus-axi` (dir 0700); `config.json` `{version, default_space}`; `spaces/{slug}/token.json` (0600) holding tokens + profile cache, and `spaces/{slug}/prefs.json` holding non-credential preferences (favorite rooms) that survive logout. Env overrides: `NEXUDUS_AXI_TOKEN` (+ `NEXUDUS_AXI_SPACE`), `NEXUDUS_AXI_PASSWORD`, `NEXUDUS_AXI_CONFIG_DIR`, `NEXUDUS_AXI_DISABLE_HOOKS`.
 

@@ -146,11 +146,8 @@ export function writeConfig(cfg: UserConfig): void {
 export function readStoredSpace(slug: string): StoredSpace | undefined {
   const path = tokenPath(slug);
   if (!existsSync(path)) return undefined;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as StoredSpace;
-  } catch {
-    return undefined;
-  }
+  // A corrupt token file is a named problem, not "not connected".
+  return readJsonFile<StoredSpace>(path, "stored credentials");
 }
 
 export function writeStoredSpace(stored: StoredSpace): void {

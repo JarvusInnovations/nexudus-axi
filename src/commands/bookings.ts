@@ -80,7 +80,12 @@ async function bookingsList(parsed: Parsed): Promise<string> {
 
   const rows = await fetchMyBookings(active, formatWallDate(from), formatWallDate(to));
   const unpaid = await fetchUnpaidCounts(active).then(
-    (u) => (u.BookingsToPay ? `${u.BookingsToPay} booking(s) awaiting payment — see the portal` : undefined),
+    (u) =>
+      typeof u.BookingsToPay !== "number"
+        ? "unknown (the response carried no count)"
+        : u.BookingsToPay > 0
+          ? `${u.BookingsToPay} booking(s) awaiting payment — see the portal`
+          : undefined,
     (err: unknown) => unknownFee(err),
   );
 
@@ -190,15 +195,42 @@ async function bookingsCancel(parsed: Parsed): Promise<string> {
   );
   const row = mine.find((r) => r.id === id);
   if (!row) {
-    // Unknown to my calendar: already cancelled (no-op) or never mine.
+    // Not in the calendar window: look it up by id before calling it a no-op —
+    // a booking beyond the window still exists and was not cancelled.
+    const found = await nexudusRequest<BookingJsonResponse>(active, `/en/bookings/BookingJson/${id}`).then(
+      (r) => Boolean(r?.Value?.Id),
+      (err: unknown) => {
+        if (err instanceof AxiError && err.code === "NOT_FOUND") return false;
+        throw err;
+      },
+    );
+    if (found) {
+      throw new AxiError(
+        `Booking ${id} exists but is outside the calendar window this tool cancels from (30 days back to 90 ahead) — nothing was cancelled`,
+        "OUT_OF_WINDOW",
+        [`Run \`nexudus-axi bookings view ${id}\` for its details; cancel it in the member portal`],
+      );
+    }
     return renderObject({
-      status: `booking ${id} is not on your calendar — already cancelled, past the fetch window, or not yours (no-op)`,
+      status: `booking ${id} is not on your calendar and not visible to your account — already cancelled or not yours (no-op)`,
     });
   }
 
   const feeRead = await fetchCancellationFee(active, id).then((r) => r.fee as number | string, unknownFee);
 
-  await cancelBooking(active, id); // envelope failures throw inside
+  try {
+    await cancelBooking(active, id); // envelope failures throw inside
+  } catch (err) {
+    // A status-less answer: read back before claiming anything.
+    if (!(err instanceof AxiError && err.code === "UNEXPECTED_RESPONSE")) throw err;
+    const day = splitWallclock(row.start).date;
+    const still = await fetchMyBookings(active, day, day);
+    if (still.some((r) => r.id === id)) {
+      throw new AxiError(`Booking ${id} is still on your calendar after the cancel request — it was not cancelled`, "CANCEL_UNCONFIRMED", [
+        `Run \`nexudus-axi bookings view ${id}\`, then retry or cancel in the member portal`,
+      ]);
+    }
+  }
 
   return joinBlocks(
     renderObject(

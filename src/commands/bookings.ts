@@ -198,7 +198,15 @@ async function bookingsCancel(parsed: Parsed): Promise<string> {
     // Not in the calendar window: look it up by id before calling it a no-op —
     // a booking beyond the window still exists and was not cancelled.
     const found = await nexudusRequest<BookingJsonResponse>(active, `/en/bookings/BookingJson/${id}`).then(
-      (r) => Boolean(r?.Value?.Id),
+      (r) => {
+        // Only a 404 is a definite "not found"; a 200 without an id is a response we can't read.
+        if (!r?.Value?.Id) {
+          throw new AxiError(`The lookup of booking ${id} answered without a booking id — nothing was cancelled`, "UNEXPECTED_RESPONSE", [
+            `Run \`nexudus-axi bookings view ${id}\` to check it, or cancel it in the member portal`,
+          ]);
+        }
+        return true;
+      },
       (err: unknown) => {
         if (err instanceof AxiError && err.code === "NOT_FOUND") return false;
         throw err;

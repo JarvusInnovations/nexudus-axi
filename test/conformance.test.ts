@@ -557,6 +557,25 @@ describe("responses fail closed: no price, fee, status or benefits is read as 0/
     await expect(creditsCommand([])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
   });
 
+  it("a BookingJson 200 without a booking id is UNEXPECTED_RESPONSE, not a cancel no-op", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([]);
+      if (url.includes("BookingJson/98")) return json({ Value: null });
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    await expect(bookingsCommand(["cancel", "98"])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
+  it("a benefits group without its credit list is UNEXPECTED_RESPONSE, not 'no booking credits'", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => json({ Personal: {} }));
+    const { creditsCommand } = await import("../src/commands/credits.js");
+    await expect(creditsCommand([])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
   it("a corrupt token.json is CONFIG_INVALID, not 'not connected'", async () => {
     writeStoredSpace(stored());
     const { tokenPath, readStoredSpace } = await import("../src/config.js");

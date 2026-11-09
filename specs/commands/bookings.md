@@ -23,7 +23,7 @@ My existing bookings. Contract: [api/bookings § reading](../api/bookings.md#rea
 `nexudus-axi bookings cancel <id> [--space <slug>]`
 
 - Checks `getCancellationFee` first and includes any fee in the output — cancelling is not free inside the late-cancellation window.
-- A booking not on the caller's calendar window (−30 to +90 days) is checked by id (`BookingJson/{id}`): not found → `(no-op)`, exit 0; found → `OUT_OF_WINDOW`, exit 1 (the booking exists and was not cancelled).
+- A booking not on the caller's calendar window (−30 to +90 days) is checked by id (`BookingJson/{id}`): not found (a 404) → `(no-op)`, exit 0; found → `OUT_OF_WINDOW`, exit 1 (the booking exists and was not cancelled); a 200 without a booking id → `UNEXPECTED_RESPONSE`, exit 1 — a no-op is claimed only on a definite not-found.
 - A fee response without its `hasCancellationFee` boolean reads `unknown (...)`, never 0.
 - Cancels via `deletejson/{id}`; a response without a numeric `Status` is `UNEXPECTED_RESPONSE`, and the booking is then read back from the calendar — still present → `CANCEL_UNCONFIRMED`, exit 1. Output: `cancelled:` with id, room, window, `fee:` (0 or the amount, or `unknown (<CODE>: <message>)` when the pre-cancel lookup failed — never a guessed `0`).
 - Already-cancelled → no-op, exit 0 (`already cancelled`). Unknown id → `NOT_FOUND`, exit 1.

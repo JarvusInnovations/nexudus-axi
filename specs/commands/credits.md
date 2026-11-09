@@ -8,7 +8,7 @@ Booking-credit and allowance balances. Contract: [api/coworker § benefits](../a
 
 - Default schema: `credits[N]{scope,name,remaining,total,expires}` — `scope` is `personal` \| `team`; only rows with `CaneBeUsedForBookings` true (yes, the API misspells it).
 - Time passes and extra services render as their own sections (`passes[N]`, `services[N]`) **only when non-empty** — most members only carry booking credits, and empty sections are noise.
-- Header: `space:`. Zero balances are definitive (`credits: no booking credits on <space>`) — but only when the benefits response carries its `Personal`/`Team` groups; a response with neither is `UNEXPECTED_RESPONSE`, never "no credits".
+- Header: `space:`. Zero balances are definitive (`credits: no booking credits on <space>`) — but only when the benefits response carries its `Personal`/`Team` groups; a response with neither is `UNEXPECTED_RESPONSE`, never "no credits", and so is a group that is present without its `BookingCredits` list.
 - Suggestions: `book --room <id> ...` (credits exist to be spent), `rooms`.
 
 ## Principles

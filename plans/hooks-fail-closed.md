@@ -7,6 +7,7 @@ specs:
   - specs/commands/bookings.md
   - specs/commands/book.md
 issues: []
+pr: 24
 ---
 
 # Plan: Every hook, fee and confirmation read fails closed

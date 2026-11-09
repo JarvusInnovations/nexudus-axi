@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
@@ -171,6 +171,38 @@ describe("session hooks register only from setup hooks", () => {
       expect(second).toContain("already installed and current at project scope (no-op)");
       expect(readFileSync(join(process.cwd(), ".claude", "settings.json"), "utf-8")).toBe(settings);
     } finally {
+      process.argv[1] = prevArgv1;
+      process.chdir(prevCwd);
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("a write the SDK reports as failed is SETUP_FAILED, not a warning on exit 0", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "nexudus-axi-proj-"));
+    const prevCwd = process.cwd();
+    const prevArgv1 = process.argv[1];
+    const fakeBin = join(projectDir, "dist", "bin", "nexudus-axi.js");
+    mkdirSync(dirname(fakeBin), { recursive: true });
+    writeFileSync(fakeBin, "");
+    // One target unwritable: the Claude Code settings directory is read-only.
+    const claudeDir = join(projectDir, ".claude");
+    mkdirSync(claudeDir);
+    chmodSync(claudeDir, 0o555);
+    process.argv[1] = fakeBin;
+    process.chdir(projectDir);
+    delete process.env.NEXUDUS_AXI_DISABLE_HOOKS;
+    try {
+      const { setupCommand } = await import("../src/commands/setup.js");
+      const err = await setupCommand(["hooks", "--scope", "project"]).then(
+        () => undefined,
+        (e: unknown) => e as AxiError,
+      );
+      expect(err?.code).toBe("SETUP_FAILED");
+      expect(err?.message).toContain(".claude");
+      expect(err?.suggestions.join(" ")).toContain("Claude Code");
+      expect(err?.suggestions.join(" ")).toContain("setup hooks --scope project");
+    } finally {
+      chmodSync(claudeDir, 0o755);
       process.argv[1] = prevArgv1;
       process.chdir(prevCwd);
       rmSync(projectDir, { recursive: true, force: true });

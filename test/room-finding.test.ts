@@ -49,11 +49,11 @@ describe("prefs lifecycle", () => {
     expect(readPrefs("acme").favorite_rooms).toEqual([11, 12]);
   });
 
-  it("falls back to empty on an unparseable prefs file", () => {
+  it("fails CONFIG_INVALID on an unparseable prefs file rather than reading it as empty", () => {
     writePrefs("acme", { favorite_rooms: [1] });
     const { writeFileSync } = require("node:fs") as typeof import("node:fs");
     writeFileSync(prefsPath("acme"), "{corrupt");
-    expect(readPrefs("acme")).toEqual({});
+    expect(() => readPrefs("acme")).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }));
   });
 });
 

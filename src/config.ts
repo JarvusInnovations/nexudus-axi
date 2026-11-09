@@ -100,15 +100,29 @@ export function defaultConfig(): UserConfig {
   return { version: CONFIG_VERSION };
 }
 
-/** Any unparseable config falls back to defaults — never throws. */
+/**
+ * Parse a local JSON state file, or fail CONFIG_INVALID naming it — never an
+ * empty default a later write would silently replace the user's data with.
+ */
+function readJsonFile<T>(path: string, kind: string): T {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf-8"));
+  } catch (err) {
+    throw new AxiError(`${kind} at ${path} could not be read: ${err instanceof Error ? err.message : String(err)}`, "CONFIG_INVALID", [
+      `Fix or delete ${path}, then re-run`,
+    ]);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new AxiError(`${kind} at ${path} is not a JSON object`, "CONFIG_INVALID", [`Fix or delete ${path}, then re-run`]);
+  }
+  return parsed as T;
+}
+
 export function readConfig(): UserConfig {
   const path = configPath();
   if (!existsSync(path)) return defaultConfig();
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as UserConfig;
-  } catch {
-    return defaultConfig();
-  }
+  return readJsonFile<UserConfig>(path, "config");
 }
 
 function ensureDir(dir: string): void {
@@ -173,15 +187,10 @@ export function prefsPath(slug: string): string {
   return join(spaceDir(slug), "prefs.json");
 }
 
-/** Unparseable prefs fall back to empty — never throws. */
 export function readPrefs(slug: string): SpacePrefs {
   const path = prefsPath(slug);
   if (!existsSync(path)) return {};
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as SpacePrefs;
-  } catch {
-    return {};
-  }
+  return readJsonFile<SpacePrefs>(path, "space preferences");
 }
 
 export function writePrefs(slug: string, prefs: SpacePrefs): void {

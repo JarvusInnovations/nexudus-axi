@@ -6,7 +6,7 @@ import {
   creditsUsed,
   previewInvoice,
 } from "../nexudus/booking.js";
-import { fetchMyBookings, splitWallclock } from "../nexudus/mybookings.js";
+import { fetchMyBookings, resolveCoworkerId, splitWallclock } from "../nexudus/mybookings.js";
 import { fetchResources, resolveRoom } from "../nexudus/resolve.js";
 import { compressSlots, fetchAvailability } from "../nexudus/slots.js";
 import { addDays, formatWallDate, renderTime, resolveWindow } from "../time/wallclock.js";
@@ -32,12 +32,8 @@ export async function bookCommand(args: string[]): Promise<string> {
   // Booking is the outward-facing mutation — explicit space with 2+ stored.
   const active = activeSpaceFrom(parsed, { mutation: true });
   const zone = active.stored?.profile_cache?.timezone;
-  const coworkerId = active.stored?.profile_cache?.coworker_id;
-  if (!coworkerId) {
-    throw new AxiError("No cached member identity for this space", "PROFILE_MISSING", [
-      `Run \`nexudus-axi auth login --space ${active.space} ...\` to refresh the profile`,
-    ]);
-  }
+  // Cached, else read live (env-token mode) — never booked under an absent id.
+  const coworkerId = await resolveCoworkerId(active);
 
   const window = resolveWindow({ date: str(parsed, "--date"), from: from!, to: to!, zone });
   const date = formatWallDate(window.date);

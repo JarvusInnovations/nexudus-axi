@@ -51,6 +51,8 @@ src/
 
 ## Config & state
 
+Reads fail closed: a local file that can't be parsed, or an API response whose list field isn't a list (`AvailableSlots`, `Resources`, the calendar feed), is a named error — never an empty default that a later command would act on.
+
 Per [spaces-and-accounts](behaviors/spaces-and-accounts.md): `$XDG_CONFIG_HOME/nexudus-axi` or `~/.config/nexudus-axi` (dir 0700); `config.json` `{version, default_space}`; `spaces/{slug}/token.json` (0600) holding tokens + profile cache, and `spaces/{slug}/prefs.json` holding non-credential preferences (favorite rooms) that survive logout. Env overrides: `NEXUDUS_AXI_TOKEN` (+ `NEXUDUS_AXI_SPACE`), `NEXUDUS_AXI_PASSWORD`, `NEXUDUS_AXI_CONFIG_DIR`, `NEXUDUS_AXI_DISABLE_HOOKS`.
 
 ## Docs & skill generation

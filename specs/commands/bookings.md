@@ -7,7 +7,7 @@ My existing bookings. Contract: [api/bookings § reading](../api/bookings.md#rea
 `nexudus-axi bookings [--date <when> | --days <n>] [--all] [--space <slug>]`
 
 - Default window: today through +7 days. `--date` narrows to one day; `--days <n>` widens from today; `--all` widens the fetch to 30 days back through the forward window (the feed reaches at least a month back — verified live).
-- Backed by `fullCalendarBookings` filtered to the caller's cached coworker id (the feed carries every member's bookings, others anonymized — see [api/bookings](../api/bookings.md#reading-my-bookings)). `getUnpaidBookings` returns counts, not a list — a non-zero `BookingsToPay` surfaces as an `unpaid:` header note, not per-row flags.
+- Backed by `fullCalendarBookings` filtered to the caller's coworker id (cached, else read live from `/en/profile`; a response that isn't a list is `UNEXPECTED_RESPONSE`, never an empty calendar) (the feed carries every member's bookings, others anonymized — see [api/bookings](../api/bookings.md#reading-my-bookings)). `getUnpaidBookings` returns counts, not a list — a non-zero `BookingsToPay` surfaces as an `unpaid:` header note, not per-row flags; if that read fails, `unpaid: unknown (<CODE>: <message>)`.
 - Default schema: `bookings[N]{id,room,date,from,to,status}` sorted by start, space wall-clock.
 - Header: `space:`, resolved window. Empty is definitive.
 - Suggestions: `bookings view <id>`, `bookings cancel <id>`, `book --room <room> ...`.

@@ -389,6 +389,79 @@ describe("cost and confirmation reads fail closed", () => {
   });
 });
 
+describe("every read fails closed (v0.3.2 review)", () => {
+  function noCache(): StoredSpace {
+    const s = stored();
+    delete (s as { profile_cache?: unknown }).profile_cache;
+    return s;
+  }
+
+  it("with no cached member id, the id is read live, so a cancel finds the booking instead of claiming a no-op", async () => {
+    writeStoredSpace(noCache());
+    const day = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/en/profile")) return json({ Id: MY_ID, FullName: "Member", Email: "member@example.com", InvoicingBusinessId: 1 });
+      if (url.includes("/en/business/all")) return json([{ Id: 1, Name: "Acme" }]);
+      if (url.includes("fullCalendarBookings")) {
+        return json([{ id: 42, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      }
+      if (url.toLowerCase().includes("cancellationfee")) return json({ hasCancellationFee: false, cancellationFee: null });
+      return json({ WasSuccessful: true });
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    const out = await bookingsCommand(["cancel", "42"]);
+    expect(out).toContain("cancelled:");
+    expect(out).not.toContain("(no-op)");
+  });
+
+  it("a calendar response that isn't a list is UNEXPECTED_RESPONSE, not an empty calendar", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).includes("fullCalendarBookings") ? json({ odd: true }) : json({}),
+    );
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    await expect(bookingsCommand(["list"])).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
+  it("availability and resource responses without their list are UNEXPECTED_RESPONSE, not 'fully booked'", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).includes("publicresources")
+        ? json({ Resources: [{ Id: ROOM_ID, UniqueId: "g", Name: "Call Room", Visible: true }] })
+        : json({}),
+    );
+    const { fetchAvailability } = await import("../src/nexudus/slots.js");
+    const { resolveActiveSpace } = await import("../src/config.js");
+    await expect(fetchAvailability(resolveActiveSpace({}), "g", "2026-09-05", 1, 30)).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => json({}));
+    const { fetchResources } = await import("../src/nexudus/resolve.js");
+    await expect(fetchResources(resolveActiveSpace({}))).rejects.toMatchObject({ code: "UNEXPECTED_RESPONSE" });
+  });
+
+  it("a corrupt prefs file fails CONFIG_INVALID and `favorites clear` leaves it untouched", async () => {
+    writeStoredSpace(stored());
+    const { prefsPath } = await import("../src/config.js");
+    writeFileSync(prefsPath("acme"), "{corrupt");
+    const { roomsCommand } = await import("../src/commands/rooms.js");
+    await expect(roomsCommand(["favorites", "clear"])).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+    expect(readFileSync(prefsPath("acme"), "utf-8")).toBe("{corrupt");
+  });
+
+  it("a failed unpaid-count read shows as unknown, not omitted", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) return json([]);
+      if (url.includes("getUnpaidBookings")) return json({ Message: "boom" }, 500);
+      return json({});
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    expect(await bookingsCommand(["list"])).toMatch(/unpaid: "?unknown \(/);
+  });
+});
+
 describe("book: a repeat of a booking that already landed is a no-op", () => {
   const RESOURCES = {
     Resources: [

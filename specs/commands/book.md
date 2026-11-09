@@ -14,7 +14,7 @@ Flow (one invocation, no prompts):
 2. **Price preview** via `PreviewInvoice`: cost in dollars, credits consumed, or both.
 3. `--dry-run`: stop here. Output `would_book:` with room, window, `total:`, `credits_used:`, and availability — exit 0.
 4. Commit via the basket's `CreateInvoice?createZeroValueInvoice=true` (the member path — see [api/bookings § Write endpoints](../api/bookings.md#write-endpoints-verified-live-2026-09-01)) with a fresh client-generated `UniqueId` and `ChargeNow: true`. Success is an empty 200 and returns no id.
-5. **Confirm from the server, never echo the request.** Snapshot the caller's bookings for the resource across `date ± 1 day` *before* the commit, refetch after, and identify the new row by set difference on booking id — deliberately not by matching the requested window, since a shifted booking must still be found (and could land on an adjacent day).
+5. **Confirm from the server, never echo the request.** Snapshot the caller's bookings for the resource across `date ± 1 day` *before* the commit, refetch after, and identify the new row by set difference on booking id — deliberately not by matching the requested window, since a shifted booking must still be found (and could land on an adjacent day). If the *before* snapshot cannot be read, refuse before committing (`CONFIRMATION_UNAVAILABLE`, exit 1, nothing booked): without it an existing booking could be mistaken for the new one.
 6. Output: `booked:` with booking id, room, and the **confirmed** window read back from the server (space wall-clock), plus `total:` and `credits_used:` — **cost visibility is mandatory** ([Preview before commit](../principles.md#preview-before-commit-but-never-prompt)).
 
 ## Confirmed times

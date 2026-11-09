@@ -16,14 +16,14 @@ My existing bookings. Contract: [api/bookings § reading](../api/bookings.md#rea
 
 `nexudus-axi bookings view <id> [--space <slug>]`
 
-- Backed by `BookingJson/{id}`. Detail: room, window, status, cost/credits as recorded, visitors, notes — plus the cancellation fee from `getCancellationFee` when the booking is upcoming, so the cancel decision is informed before it's made.
+- Backed by `BookingJson/{id}`. Detail: room, window, status, cost/credits as recorded, visitors, notes — plus the cancellation fee from `getCancellationFee` when the booking is upcoming, so the cancel decision is informed before it's made. If the fee lookup fails, the field reads `unknown (<CODE>: <message>)` — never `0`.
 
 ## bookings cancel
 
 `nexudus-axi bookings cancel <id> [--space <slug>]`
 
 - Checks `getCancellationFee` first and includes any fee in the output — cancelling is not free inside the late-cancellation window.
-- Cancels via `deletejson/{id}`. Output: `cancelled:` with id, room, window, `fee:` (0 or the amount).
+- Cancels via `deletejson/{id}`. Output: `cancelled:` with id, room, window, `fee:` (0 or the amount, or `unknown (<CODE>: <message>)` when the pre-cancel lookup failed — never a guessed `0`).
 - Already-cancelled → no-op, exit 0 (`already cancelled`). Unknown id → `NOT_FOUND`, exit 1.
 - Mutation guard: with 2+ stored spaces, explicit `--space` required.
 

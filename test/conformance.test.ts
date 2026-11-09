@@ -42,14 +42,21 @@ function json(body: unknown, status = 200): Response {
 }
 
 let dir: string;
+let fakeHome: string;
+const realHome = process.env.HOME;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "nexudus-axi-test-"));
   process.env.NEXUDUS_AXI_CONFIG_DIR = dir;
+  // The SDK writes Codex's flag to ~/.codex/config.toml at any scope: never let a test reach the real one.
+  fakeHome = mkdtempSync(join(tmpdir(), "nexudus-axi-home-"));
+  process.env.HOME = fakeHome;
   process.exitCode = 0;
 });
 afterEach(() => {
   vi.restoreAllMocks();
   rmSync(dir, { recursive: true, force: true });
+  process.env.HOME = realHome;
+  rmSync(fakeHome, { recursive: true, force: true });
   delete process.env.NEXUDUS_AXI_CONFIG_DIR;
   process.env.NEXUDUS_AXI_DISABLE_HOOKS = "1";
   process.exitCode = 0;
@@ -238,6 +245,147 @@ describe("session hooks register only from setup hooks", () => {
       process.env.HOME = prevHome;
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe("hooks fail closed on files they cannot read, parse or confirm", () => {
+  /** Install for real at project scope from a posed-as-installed entrypoint, then run `body` there. */
+  async function inInstalledProject(body: (root: string) => Promise<void>) {
+    const projectDir = mkdtempSync(join(tmpdir(), "nexudus-axi-proj-"));
+    const prevCwd = process.cwd();
+    const prevArgv1 = process.argv[1];
+    const fakeBin = join(projectDir, "dist", "bin", "nexudus-axi.js");
+    mkdirSync(dirname(fakeBin), { recursive: true });
+    writeFileSync(fakeBin, "");
+    process.argv[1] = fakeBin;
+    process.chdir(projectDir);
+    delete process.env.NEXUDUS_AXI_DISABLE_HOOKS;
+    try {
+      const { setupCommand } = await import("../src/commands/setup.js");
+      expect(await setupCommand(["hooks", "--scope", "project"])).toContain("installed/repaired at project scope");
+      await body(process.cwd());
+    } finally {
+      process.argv[1] = prevArgv1;
+      process.chdir(prevCwd);
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  }
+
+  it("uninstall with an unparseable settings file that may hold the hook is IO_ERROR, not removed/no-op", async () => {
+    await inInstalledProject(async (root) => {
+      const settings = join(root, ".claude", "settings.json");
+      writeFileSync(settings, readFileSync(settings, "utf-8") + "{ trailing garbage");
+      const { setupCommand } = await import("../src/commands/setup.js");
+      const err = await setupCommand(["hooks", "uninstall", "--scope", "project"]).then(
+        () => undefined,
+        (e: unknown) => e as AxiError,
+      );
+      expect(err?.code).toBe("IO_ERROR");
+      expect(err?.message).toContain("settings.json");
+      expect(err?.message).toContain("not valid JSON");
+      // The readable targets were still cleaned, and it says so.
+      expect(err?.suggestions.join(" ")).toContain("Removed from: Codex, OpenCode");
+    });
+  });
+
+  it("uninstall with an unreadable settings file is IO_ERROR", async () => {
+    await inInstalledProject(async (root) => {
+      const settings = join(root, ".claude", "settings.json");
+      chmodSync(settings, 0o000);
+      try {
+        const { setupCommand } = await import("../src/commands/setup.js");
+        await expect(setupCommand(["hooks", "uninstall", "--scope", "project"])).rejects.toMatchObject({ code: "IO_ERROR" });
+      } finally {
+        chmodSync(settings, 0o644);
+      }
+    });
+  });
+
+  it("status reports an unparseable target as a problem, and doctor fails on it", async () => {
+    await inInstalledProject(async (root) => {
+      writeFileSync(join(root, ".codex", "hooks.json"), "{ not json");
+      const { setupCommand } = await import("../src/commands/setup.js");
+      const out = await setupCommand(["hooks", "status", "--scope", "project"]);
+      expect(out).toMatch(/problems\[1\]\{agent,problem\}:/);
+      expect(out).toContain("not valid JSON");
+    });
+  });
+
+  it("Codex with [features] hooks = false is not current: status problem, doctor fail", async () => {
+    mkdirSync(join(fakeHome, ".codex"), { recursive: true });
+    await inInstalledProject(async () => {
+      writeFileSync(join(fakeHome, ".codex", "config.toml"), "[features]\nhooks = false\n");
+      const { setupCommand, hookDoctorCheck } = await import("../src/commands/setup.js");
+      const out = await setupCommand(["hooks", "status", "--scope", "project"]);
+      expect(out).toContain("hooks` is false");
+      // Doctor checks user scope; install there too so Codex's row is present.
+      const prevArgv1 = process.argv[1];
+      try {
+        expect(await setupCommand(["hooks"]).catch((e: AxiError) => e.code)).toBeTypeOf("string");
+      } finally {
+        process.argv[1] = prevArgv1;
+      }
+      writeFileSync(join(fakeHome, ".codex", "config.toml"), "[features]\nhooks = false\n");
+      const check = hookDoctorCheck();
+      expect(check.status).toBe("fail");
+      expect(check.detail).toContain("hooks` is false");
+    });
+  });
+
+  it("a repeat install that only re-enables Codex's flag is not reported as a no-op", async () => {
+    await inInstalledProject(async () => {
+      writeFileSync(join(fakeHome, ".codex", "config.toml"), "[features]\nhooks = false\n");
+      const { setupCommand } = await import("../src/commands/setup.js");
+      const out = await setupCommand(["hooks", "--scope", "project"]);
+      expect(out).toContain("installed/repaired at project scope");
+      expect(out).not.toContain("(no-op)");
+      expect(readFileSync(join(fakeHome, ".codex", "config.toml"), "utf-8")).toMatch(/hooks = true/);
+    });
+  });
+});
+
+describe("cost and confirmation reads fail closed", () => {
+  it("bookings cancel reports an unknown fee when the lookup fails, never 0.00", async () => {
+    writeStoredSpace(stored());
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("fullCalendarBookings")) {
+        // Inside cancel's calendar lookup window (-30d..+90d).
+        const day = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+        return json([{ id: 777, resourceId: ROOM_ID, resourceName: "Call Room", start: `${day}T15:00Z`, end: `${day}T15:30Z`, coworkerId: String(MY_ID) }]);
+      }
+      if (url.toLowerCase().includes("cancellationfee")) return json({ Message: "boom" }, 500);
+      return json({ WasSuccessful: true });
+    });
+    const { bookingsCommand } = await import("../src/commands/bookings.js");
+    const out = await bookingsCommand(["cancel", "777"]);
+    expect(out).toMatch(/fee: "?unknown \(/);
+    expect(out).not.toContain("0.00");
+  });
+
+  it("book refuses before committing when the before-snapshot can't be read", async () => {
+    writeStoredSpace(stored());
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("publicresources")) {
+        return json({ Resources: [{ Id: ROOM_ID, UniqueId: "guid-31", Name: "Call Room", ResourceTypeName: "Phone Rooms", Allocation: 2, Visible: true, DisplayOrder: 1 }] });
+      }
+      if (url.includes("GetAvailabilityAtWithUser")) {
+        const slots = [];
+        for (let m = 0; m < 24 * 60; m += 15) {
+          slots.push({ DateTime: `2026-09-05T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`, Available: true });
+        }
+        return json({ AvailableSlots: slots });
+      }
+      if (url.includes("PreviewInvoice")) return json({ TotalAmount: 0, Currency: { Code: "USD" }, WasSuccessful: true });
+      if (url.includes("fullCalendarBookings")) return json({ Message: "boom" }, 500);
+      return json({});
+    });
+    const { bookCommand } = await import("../src/commands/book.js");
+    await expect(bookCommand(["--room", "Call Room", "--date", "2026-09-05", "--from", "15:00", "--to", "+30m"])).rejects.toMatchObject({
+      code: "CONFIRMATION_UNAVAILABLE",
+    });
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("CreateInvoice"))).toBe(false);
   });
 });
 

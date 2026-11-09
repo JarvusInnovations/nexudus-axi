@@ -259,5 +259,5 @@ export const BOOK_FLAGS: FlagSpec = {
 export const BOOKINGS_FLAGS: Record<string, FlagSpec> = {
   list: { value: ["--date", "--days"], boolean: ["--all"] },
   view: { positionals: 1, usage: "nexudus-axi bookings view <id>" },
-  cancel: { positionals: 1, usage: "nexudus-axi bookings cancel <id>" },
+  cancel: { boolean: ["--accept-fee"], positionals: 1, usage: "nexudus-axi bookings cancel <id> [--accept-fee]" },
 };

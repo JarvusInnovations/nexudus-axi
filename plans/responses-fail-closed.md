@@ -7,6 +7,7 @@ specs:
   - specs/commands/bookings.md
   - specs/commands/credits.md
 issues: []
+pr: 28
 ---
 
 # Plan: No response field is ever read as 0, none or success

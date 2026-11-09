@@ -4,6 +4,7 @@ depends: [partial-bodies-fail-closed]
 specs:
   - specs/commands/bookings.md
 issues: []
+pr: 32
 ---
 
 # Plan: A late-cancellation fee is never incurred implicitly

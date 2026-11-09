@@ -16,7 +16,7 @@ None of the channels is a prompt — the command never blocks on a TTY (AXI §6)
 - Writes `spaces/{slug}/token.json` (0600). **The password is never persisted.**
 - `--space` accepts the bare slug (`acme`) or the full host (`acme.spaces.nexudus.com`) — normalized to the slug.
 - `--timezone` overrides/supplies the space IANA timezone when the API doesn't expose it (see [time-and-timezone](../behaviors/time-and-timezone.md)).
-- First stored space becomes the default automatically. Confirms with resolved identity (space, member name, email, plan name) + hook status.
+- First stored space becomes the default automatically. Confirms with resolved identity (space, member name, email, plan name) + a read-only `session_hook:` line (installed and current / stale / not installed, with the `setup hooks` command). Login never installs a hook — see [setup](setup.md).
 - No password through any channel: exit 2 with a structured instruction naming all three channels, leading with the `--password-stdin` pipe form (never prompt).
 - Re-login over an existing space replaces its tokens — idempotent.
 
@@ -40,7 +40,7 @@ None of the channels is a prompt — the command never blocks on a TTY (AXI §6)
 2. **token** — `/en/profile?_resource=Coworker` succeeds? (auto-refresh exercised and reported if it fired)
 3. **profile cache** — coworker id + business id + timezone cached? (missing timezone → remediation: `auth login --timezone`)
 4. **resources read** — `/en/publicresources?_depth=3` returns ≥1 resource? (the canary for portal-contract drift, per [Reverse-engineered surface](../principles.md#reverse-engineered-surface-specd-honestly))
-5. **hooks** — SessionStart hook installed and current? (remediation: `setup hooks`)
+5. **hooks** — SessionStart hook installed and current? The hook is optional (the installable skill is an alternative), so **not installed is `skipped`, not `fail`**; an installed hook pointing at a different executable is `fail` (remediation: `setup hooks`).
 
 Exit 0 all-pass, else 1.
 

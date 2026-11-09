@@ -1,3 +1,4 @@
+import { AxiError } from "axi-sdk-js";
 import { HOME_FLAGS, parseFlags, str, type Parsed } from "../flags.js";
 import { getDefaultSpace, isConfigured, listSpaceSlugs, resolveActiveSpace } from "../config.js";
 import { fetchMyBookings, splitWallclock } from "../nexudus/mybookings.js";
@@ -33,13 +34,33 @@ interface HomeBenefits {
   Team?: { BookingCredits?: CreditRow[] };
 }
 
+/**
+ * A failed read is reported as unavailable with its error code — never as an
+ * empty result. "nothing booked" after an expired token would be a confident
+ * lie in the one view that loads at every session start.
+ */
+type Read<T> = { ok: true; value: T } | { ok: false; reason: string };
+
+function unavailable(err: unknown): { ok: false; reason: string } {
+  const reason = err instanceof AxiError ? `${err.code}: ${err.message}` : err instanceof Error ? err.message : String(err);
+  return { ok: false, reason: reason.length > 160 ? `${reason.slice(0, 157)}...` : reason };
+}
+
+async function settle<T>(promise: Promise<T>): Promise<Read<T>> {
+  try {
+    return { ok: true, value: await promise };
+  } catch (err) {
+    return unavailable(err);
+  }
+}
+
 async function creditLines(active: ReturnType<typeof resolveActiveSpace>): Promise<string | undefined> {
   const benefits = await nexudusRequest<HomeBenefits>(active, "/api/public/coworkers/profiles/current/benefits", {
     query: {
       _shape:
         "Personal.BookingCredits.Name,Personal.BookingCredits.RemainingCredit,Personal.BookingCredits.ExpireDate,Personal.BookingCredits.CaneBeUsedForBookings,Team.BookingCredits.Name,Team.BookingCredits.RemainingCredit,Team.BookingCredits.ExpireDate,Team.BookingCredits.CaneBeUsedForBookings",
     },
-  }).catch((): HomeBenefits => ({}));
+  });
 
   const rows = [
     ...(benefits.Personal?.BookingCredits ?? []),
@@ -67,10 +88,11 @@ export async function homeCommand(args: string[]): Promise<string> {
   const zone = active.stored?.profile_cache?.timezone;
   const today = todayInZone(zone);
 
-  const [bookings, credits] = await Promise.all([
-    fetchMyBookings(active, formatWallDate(today), formatWallDate(addDays(today, 7))).catch(() => []),
-    creditLines(active),
+  const [bookingsRead, creditsRead] = await Promise.all([
+    settle(fetchMyBookings(active, formatWallDate(today), formatWallDate(addDays(today, 7)))),
+    settle(creditLines(active)),
   ]);
+  const credits = creditsRead.ok ? creditsRead.value : `unavailable (${creditsRead.reason})`;
 
   const others = listSpaceSlugs().filter((s) => s !== active.space);
 
@@ -85,9 +107,13 @@ export async function homeCommand(args: string[]): Promise<string> {
     ),
   ];
 
-  if (bookings.length === 0) {
+  const failed = !bookingsRead.ok || !creditsRead.ok;
+  if (!bookingsRead.ok) {
+    blocks.push(renderObject({ bookings: `unavailable (${bookingsRead.reason})` }));
+  } else if (bookingsRead.value.length === 0) {
     blocks.push(renderObject({ bookings: "nothing booked in the next 7 days" }));
   } else {
+    const bookings = bookingsRead.value;
     blocks.push(
       renderList(
         "bookings",
@@ -102,6 +128,7 @@ export async function homeCommand(args: string[]): Promise<string> {
 
   blocks.push(
     renderHelp([
+      ...(failed ? ["Run `nexudus-axi doctor` to diagnose the failed read (expired login, network, or space access)"] : []),
       "Run `nexudus-axi rooms free --from <time>` to find a room for a meeting",
       "Run `nexudus-axi rooms day` for every room's free ranges today",
       "Run `nexudus-axi book --room <room> --date <when> --from <time> --to <time|+dur>` to book",

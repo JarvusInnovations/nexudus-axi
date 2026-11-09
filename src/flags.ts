@@ -9,6 +9,15 @@ export interface FlagSpec {
   multi?: string[];
   /** Renamed or removed flags mapped to a targeted hint. */
   deprecated?: Record<string, string>;
+  /**
+   * How many positional arguments the command accepts: a count, or `"many"`
+   * for a variadic tail. Defaults to 0. Extras fail as USAGE rather than being
+   * dropped — a silently-ignored `auth logout acme` would log out of whatever
+   * space is the default instead.
+   */
+  positionals?: number | "many";
+  /** Usage line shown when extra positionals are rejected. */
+  usage?: string;
 }
 
 export interface Parsed {
@@ -132,6 +141,20 @@ export function parseFlags(command: string, argv: string[], spec: FlagSpec): Par
     unknown(name);
   }
 
+  const maxPositionals = spec.positionals ?? 0;
+  if (maxPositionals !== "many" && positional.length > maxPositionals && flags["--help"] === undefined) {
+    const extra = positional.slice(maxPositionals);
+    throw new AxiError(
+      `unexpected argument${extra.length > 1 ? "s" : ""} for \`${command}\`: ${extra.join(" ")}`,
+      "USAGE",
+      [
+        maxPositionals === 0
+          ? `\`${command}\` takes no positional arguments${spec.usage ? ` — usage: ${spec.usage}` : ""}`
+          : `\`${command}\` takes ${maxPositionals} positional argument${maxPositionals > 1 ? "s" : ""}${spec.usage ? ` — usage: ${spec.usage}` : ""}`,
+      ],
+    );
+  }
+
   return { positional, flags, multi };
 }
 
@@ -203,8 +226,8 @@ export function parseSubcommand(
 export const AUTH_FLAGS: Record<string, FlagSpec> = {
   login: { value: ["--email", "--password", "--totp", "--timezone"], boolean: ["--password-stdin"] },
   status: { boolean: ["--refresh"] },
-  use: {},
-  logout: {},
+  use: { positionals: 1, usage: "nexudus-axi auth use <slug>" },
+  logout: { usage: "nexudus-axi auth logout [--space <slug>]" },
 };
 
 export const SETUP_FLAGS: Record<string, FlagSpec> = {
@@ -219,11 +242,11 @@ export const HOME_FLAGS: FlagSpec = {};
 
 export const ROOMS_FLAGS: Record<string, FlagSpec> = {
   list: { value: ["--type"], boolean: ["--available"] },
-  view: {},
-  slots: { value: ["--date", "--days", "--interval"] },
+  view: { positionals: 1, usage: "nexudus-axi rooms view <room-id-or-name>" },
+  slots: { value: ["--date", "--days", "--interval"], positionals: 1, usage: "nexudus-axi rooms slots <room-id-or-name> [--date <when>]" },
   free: { value: ["--date", "--from", "--to", "--type"], boolean: ["--all"] },
   day: { value: ["--date", "--hours", "--type"], boolean: ["--all"] },
-  favorites: {},
+  favorites: { positionals: "many" },
 };
 
 export const CREDITS_FLAGS: FlagSpec = {};
@@ -235,6 +258,6 @@ export const BOOK_FLAGS: FlagSpec = {
 
 export const BOOKINGS_FLAGS: Record<string, FlagSpec> = {
   list: { value: ["--date", "--days"], boolean: ["--all"] },
-  view: {},
-  cancel: {},
+  view: { positionals: 1, usage: "nexudus-axi bookings view <id>" },
+  cancel: { positionals: 1, usage: "nexudus-axi bookings cancel <id>" },
 };

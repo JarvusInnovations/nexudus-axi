@@ -71,7 +71,7 @@ async function translateHttpError(res: Response, operation: string, space: strin
       return new AxiError(
         `Forbidden on ${operation}${suffix} — the member portal does not grant this`,
         "FORBIDDEN",
-        ["This tool wraps member-portal capabilities only — see specs/principles.md"],
+        ["nexudus-axi uses member-portal access only — operator/admin actions must be done in the Nexudus admin panel", "Run `nexudus-axi auth status --refresh` to confirm which member and space you are signed in as"],
       );
     case 404:
       return new AxiError(`Not found on ${operation}${suffix}`, "NOT_FOUND", [

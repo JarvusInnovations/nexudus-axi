@@ -43,8 +43,10 @@ Tokens auto-refresh (rotating refresh tokens, ~14-day access tokens), so any mac
 
 ## Ambient session context (pick one)
 
-- **SessionStart hook** — `nexudus-axi setup hooks` injects the live home view (your bookings + credits) at the start of every Claude Code / Codex / OpenCode session.
-- **Installable skill** — `skills/nexudus-axi/SKILL.md` (generated from the CLI's own reference, never drifts) for agents that load [Agent Skills](https://agentskills.io) on demand.
+You only need one of these.
+
+- **SessionStart hook** — `nexudus-axi setup hooks` injects the live home view (your bookings + credits) at the start of every Claude Code / Codex / OpenCode session. Nothing else installs it; `auth login` just tells you whether it's there. Remove it with `nexudus-axi setup hooks uninstall`.
+- **Installable skill** — `npx skills add JarvusInnovations/nexudus-axi --skill nexudus-axi`. The skill (`skills/nexudus-axi/SKILL.md`) is generated from the CLI's own reference so it never drifts, loads on demand, and costs nothing per session — but carries no live state.
 
 ## Notes for the curious
 

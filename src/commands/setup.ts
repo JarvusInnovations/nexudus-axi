@@ -207,13 +207,27 @@ function renderStatus(scope: SessionStartHookScope, suggestions: string[]): stri
   return joinBlocks(...blocks);
 }
 
+/** Contents of every file the installer may touch, to detect a no-op run. */
+function snapshot(scope: SessionStartHookScope): string[] {
+  const paths = [...jsonTargets(scope).map((t) => t.path), opencodePluginPath(scope)];
+  return paths.map((p) => {
+    try {
+      return existsSync(p) ? readFileSync(p, "utf-8") : "<absent>";
+    } catch {
+      return "<unreadable>";
+    }
+  });
+}
+
 /**
- * Install/repair the SessionStart hook for all supported agents. Shared by
- * bare `setup hooks` and (as the convenience opt-in per AXI §7) `auth login`.
- * Idempotent and self-repairing via the SDK; refuses `.ts` dev entrypoints
- * and honors `NEXUDUS_AXI_DISABLE_HOOKS=1`.
+ * Install/repair the SessionStart hook for all supported agents. Only the
+ * explicit `setup hooks` command calls this (AXI §7: hooks register from a
+ * user-invoked setup command, never as a side effect of ordinary commands).
+ * Idempotent and self-repairing via the SDK — a repeat install that changes
+ * nothing reports itself as a no-op; refuses `.ts` dev entrypoints and honors
+ * `NEXUDUS_AXI_DISABLE_HOOKS=1`.
  */
-export function installHooks(scope: SessionStartHookScope = "user"): string {
+function installHooks(scope: SessionStartHookScope): string {
   if (isDisabled()) {
     return "disabled (NEXUDUS_AXI_DISABLE_HOOKS=1)";
   }
@@ -221,15 +235,47 @@ export function installHooks(scope: SessionStartHookScope = "user"): string {
     return "skipped — running from a .ts dev entrypoint (build first)";
   }
   let error: string | undefined;
+  const before = snapshot(scope);
   installSessionStartHooks({
     marker: MARKER,
     scope,
     ...(scope === "project" ? { projectDir: process.cwd() } : {}),
     onError: (m) => (error = m),
   });
-  return error
-    ? `completed with a warning: ${error}`
-    : `installed/repaired at ${scope} scope (Claude Code, Codex, OpenCode)`;
+  if (error) return `completed with a warning: ${error}`;
+  // The SDK declines (silently) to register an entrypoint it doesn't
+  // recognize as an installed nexudus-axi binary. Verify instead of assuming.
+  const rows = statusRows(scope);
+  const missing = rows.filter((r) => !r.installed || !r.current);
+  if (missing.length > 0) {
+    throw new AxiError(
+      `session hook not registered for ${missing.map((r) => r.agent).join(", ")} — ${currentExecPath()} is not an installed nexudus-axi entrypoint`,
+      "SETUP_FAILED",
+      ["Run `setup hooks` from the installed binary: `npm install -g nexudus-axi && nexudus-axi setup hooks`"],
+    );
+  }
+  const after = snapshot(scope);
+  if (before.every((content, i) => content === after[i])) {
+    return `already installed and current at ${scope} scope (no-op)`;
+  }
+  return `installed/repaired at ${scope} scope (Claude Code, Codex, OpenCode)`;
+}
+
+/**
+ * One-line, read-only summary of the user-scope hook, for `auth login`'s
+ * confirmation. Never installs anything.
+ */
+export function hookSummary(): string {
+  if (isDisabled()) return "disabled (NEXUDUS_AXI_DISABLE_HOOKS=1)";
+  const installed = statusRows("user").filter((r) => r.installed);
+  if (installed.length === 0) {
+    return "not installed — run `nexudus-axi setup hooks` to load the home view at session start (optional)";
+  }
+  const stale = installed.filter((r) => !r.current);
+  if (stale.length > 0) {
+    return `stale for ${stale.map((r) => r.agent).join(", ")} — run \`nexudus-axi setup hooks\` to repair`;
+  }
+  return `installed and current: ${installed.map((r) => r.agent).join(", ")}`;
 }
 
 function hookStatus(scope: SessionStartHookScope): string {
@@ -345,10 +391,12 @@ export function hookDoctorCheck(): Check {
   const rows = statusRows("user");
   const installed = rows.filter((r) => r.installed);
   if (installed.length === 0) {
+    // The hook is optional (the installable skill is an alternative), so its
+    // absence is not a health failure — only a broken installed hook is.
     return {
       check: "hooks",
-      status: "fail",
-      detail: "no SessionStart hook installed — run `nexudus-axi setup hooks`",
+      status: "skipped",
+      detail: "not installed (optional) — run `nexudus-axi setup hooks` to load the home view at session start",
     };
   }
   const stale = installed.filter((r) => !r.current);

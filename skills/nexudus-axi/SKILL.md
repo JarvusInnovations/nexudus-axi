@@ -126,11 +126,13 @@ Flags:
 - --date <when>   narrow the list to one day
 - --days <n>      window width from today (default 7)
 - --all           include past bookings in the window
+- --accept-fee    cancel: go ahead when a late-cancellation fee applies (or it can't be read)
 
 ```sh
 npx -y nexudus-axi bookings
 npx -y nexudus-axi bookings view <id>
 npx -y nexudus-axi bookings cancel <id>
+npx -y nexudus-axi bookings cancel <id> --accept-fee
 ```
 
 ### `nexudus-axi credits`

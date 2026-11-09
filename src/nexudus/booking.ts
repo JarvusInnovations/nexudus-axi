@@ -61,7 +61,7 @@ export interface PreviewResult {
  * transient "Could not load your basket" occasionally (observed live) — that
  * one message gets a single retry before failing.
  */
-export async function previewInvoice(active: ActiveSpace, booking: BookingPayload): Promise<PreviewResult> {
+export async function previewInvoice(active: ActiveSpace, booking: BookingPayload): Promise<PreviewResult & { TotalAmount: number }> {
   const attempt = () =>
     nexudusRequest<PreviewResult & { Status?: number }>(active, "/en/basket/PreviewInvoice", {
       method: "POST",
@@ -80,7 +80,13 @@ export async function previewInvoice(active: ActiveSpace, booking: BookingPayloa
       ["Run `nexudus-axi rooms slots <room> --date <date>` to find an open window"],
     );
   }
-  return result;
+  // An unknown price is never free: without a numeric total, nothing is committed.
+  if (typeof result.TotalAmount !== "number") {
+    throw new AxiError("The booking preview carried no price, so nothing was booked", "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to check the portal connection, then retry with --dry-run",
+    ]);
+  }
+  return result as PreviewResult & { TotalAmount: number };
 }
 
 /** Credits consumed per the preview (sum of UsedBookingCredits amounts). */
@@ -119,6 +125,7 @@ function throwOnEnvelopeError(result: ActionEnvelope, operation: string, suggest
 export async function createBooking(active: ActiveSpace, booking: BookingPayload): Promise<void> {
   const result = await nexudusRequest<ActionEnvelope>(active, "/en/basket/CreateInvoice", {
     method: "POST",
+    allowEmpty: true,
     query: { createZeroValueInvoice: true },
     body: [{ Type: "booking", Booking: booking }],
   });
@@ -142,8 +149,13 @@ export async function fetchCancellationFee(active: ActiveSpace, bookingId: numbe
     "/en/bookings/getCancellationFee",
     { query: { bookingId } },
   );
-  const has = raw.hasCancellationFee === true;
-  return { fee: has && typeof raw.cancellationFee === "number" ? raw.cancellationFee : 0, has };
+  if (typeof raw.hasCancellationFee !== "boolean") {
+    throw new AxiError("The cancellation-fee response carried no fee flag", "UNEXPECTED_RESPONSE", []);
+  }
+  if (raw.hasCancellationFee && typeof raw.cancellationFee !== "number") {
+    throw new AxiError("The cancellation-fee response named a fee but not its amount", "UNEXPECTED_RESPONSE", []);
+  }
+  return { fee: raw.hasCancellationFee ? (raw.cancellationFee as number) : 0, has: raw.hasCancellationFee };
 }
 
 /** Cancel a booking — `{Status: 200}` envelope on success (verified live). */
@@ -155,4 +167,9 @@ export async function cancelBooking(active: ActiveSpace, bookingId: number): Pro
   throwOnEnvelopeError(result, "Cancellation failed", [
     `Run \`nexudus-axi bookings view ${bookingId}\` for the booking's current state`,
   ]);
+  if (typeof result.Status !== "number") {
+    throw new AxiError(`The cancellation response for booking ${bookingId} carried no status`, "UNEXPECTED_RESPONSE", [
+      `Run \`nexudus-axi bookings view ${bookingId}\` to see whether it was cancelled`,
+    ]);
+  }
 }

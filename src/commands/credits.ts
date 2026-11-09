@@ -1,3 +1,4 @@
+import { AxiError } from "axi-sdk-js";
 import { CREDITS_FLAGS, parseFlags } from "../flags.js";
 import { nexudusRequest } from "../nexudus/client.js";
 import { computed, joinBlocks, renderHelp, renderList, renderObject } from "../output/index.js";
@@ -88,6 +89,12 @@ export async function creditsCommand(args: string[]): Promise<string> {
     { query: { _shape: BENEFITS_SHAPE } },
   );
 
+  // No groups at all is a response we can't read, never "no credits".
+  if (!benefits || (benefits.Personal == null && benefits.Team == null)) {
+    throw new AxiError("The benefits response carried neither personal nor team benefits", "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to check the portal connection",
+    ]);
+  }
   const scoped = [
     ["personal", benefits.Personal],
     ["team", benefits.Team],

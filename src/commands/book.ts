@@ -101,7 +101,7 @@ export async function bookCommand(args: string[]): Promise<string> {
     coworkerId,
   });
   const preview = await previewInvoice(active, booking);
-  const total = preview.TotalAmount ?? 0;
+  const total = preview.TotalAmount;
   const credits = creditsUsed(preview);
   const currency = preview.Currency?.Code ?? "USD";
 

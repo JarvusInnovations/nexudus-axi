@@ -19,6 +19,12 @@ export interface RequestOptions {
   body?: unknown;
   /** Skip the one-shot 401→refresh→retry (used by the refresh path itself). */
   noRefresh?: boolean;
+  /**
+   * The endpoint answers success with an empty 200 (only CreateInvoice, verified
+   * live). Everywhere else an empty body is UNEXPECTED_RESPONSE, never `{}`
+   * whose missing fields would read as 0/none/success.
+   */
+  allowEmpty?: boolean;
 }
 
 function buildUrl(baseUrl: string, path: string, query?: Record<string, QueryValue>): string {
@@ -148,7 +154,12 @@ export async function nexudusRequest<T = Record<string, unknown>>(
   if (!res.ok) throw await translateHttpError(res, operation, active.space);
 
   const text = await res.text();
-  if (!text) return {} as T;
+  if (!text) {
+    if (options.allowEmpty) return {} as T;
+    throw new AxiError(`Nexudus returned an empty response on ${operation}`, "UNEXPECTED_RESPONSE", [
+      "Run `nexudus-axi doctor` to diagnose, then retry",
+    ]);
+  }
   if (looksLikeHtml(text)) {
     throw new AxiError(
       `Nexudus returned a web page instead of data on ${operation}`,

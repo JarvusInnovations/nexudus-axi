@@ -234,19 +234,30 @@ function installHooks(scope: SessionStartHookScope): string {
   if (isDevEntrypoint(currentExecPath())) {
     return "skipped — running from a .ts dev entrypoint (build first)";
   }
-  let error: string | undefined;
+  const errors: string[] = [];
   const before = snapshot(scope);
   installSessionStartHooks({
     marker: MARKER,
     scope,
     ...(scope === "project" ? { projectDir: process.cwd() } : {}),
-    onError: (m) => (error = m),
+    onError: (m) => errors.push(m),
   });
-  if (error) return `completed with a warning: ${error}`;
-  // The SDK declines (silently) to register an entrypoint it doesn't
-  // recognize as an installed nexudus-axi binary. Verify instead of assuming.
   const rows = statusRows(scope);
   const missing = rows.filter((r) => !r.installed || !r.current);
+  // A write the SDK reports as failed is a failed setup, never a warning on
+  // exit 0 (AXI §6: fail closed).
+  if (errors.length > 0) {
+    throw new AxiError(
+      `session hook install failed at ${scope} scope: ${errors.join("; ")}`,
+      "SETUP_FAILED",
+      [
+        ...(missing.length > 0 ? [`Not installed or not current: ${missing.map((r) => r.agent).join(", ")}`] : []),
+        `Fix the file permissions named above, then run \`nexudus-axi setup hooks${scope === "project" ? " --scope project" : ""}\` again`,
+      ],
+    );
+  }
+  // The SDK declines (silently) to register an entrypoint it doesn't
+  // recognize as an installed nexudus-axi binary. Verify instead of assuming.
   if (missing.length > 0) {
     throw new AxiError(
       `session hook not registered for ${missing.map((r) => r.agent).join(", ")} — ${currentExecPath()} is not an installed nexudus-axi entrypoint`,

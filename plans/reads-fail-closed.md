@@ -6,6 +6,7 @@ specs:
   - specs/behaviors/spaces-and-accounts.md
   - specs/commands/bookings.md
 issues: []
+pr: 26
 ---
 
 # Plan: Every read fails closed

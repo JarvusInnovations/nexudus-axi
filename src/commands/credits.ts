@@ -100,6 +100,14 @@ export async function creditsCommand(args: string[]): Promise<string> {
     ["team", benefits.Team],
   ] as const;
 
+  // A group present without its list is a partial response, never "no credits".
+  for (const [scope, group] of scoped) {
+    if (group != null && !Array.isArray(group.BookingCredits)) {
+      throw new AxiError(`The ${scope} benefits carried no booking-credit list`, "UNEXPECTED_RESPONSE", [
+        "Run `nexudus-axi doctor` to check the portal connection",
+      ]);
+    }
+  }
   const credits = scoped.flatMap(([scope, group]) =>
     (group?.BookingCredits ?? [])
       .filter((c) => c.CaneBeUsedForBookings === true)

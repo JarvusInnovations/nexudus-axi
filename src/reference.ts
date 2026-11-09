@@ -51,11 +51,11 @@ export const COMMAND_GROUPS: CommandGroup[] = [
         ],
       },
       {
-        usage: "book --room <room> --date <when> --from <time> --to <time|+dur> [--dry-run]",
+        usage: "book --room <room> [--date <when>] --from <time> --to <time|+dur> [--dry-run]",
         summary: "Price and create a booking — always reports what it cost (credits and/or dollars)",
         flags: [
           "--room <room>   required — room id or name",
-          "--date <when>   required — YYYY-MM-DD, today, tomorrow, +Nd",
+          "--date <when>   YYYY-MM-DD, today, tomorrow, +Nd (default: today)",
           "--from <time>   required — start, e.g. 14:00 or 2pm",
           "--to <time>     required — end, e.g. 15:00, 3pm, or a duration like +1h",
           "--dry-run       price the booking and stop — nothing is committed",

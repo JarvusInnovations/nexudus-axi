@@ -13,6 +13,7 @@ The Nexudus API speaks the **space's local wall-clock**, serialized with a misle
 ### Wall-clock discipline (the fake-Z quirk)
 
 - API datetimes (`2026-09-01T14:00:00.000Z`) mean *that wall-clock time at the space*, not UTC. They cross the boundary verbatim as strings; any implementer reaching for `Date.toISOString()` on a booking time is writing a bug.
+- **The bug is silent and expensive.** Sending an offset-bearing value (`...T15:00:00-04:00`, which is what serializing a `Date` produces) makes the server normalize to UTC and store *that* as the wall clock — the booking lands hours away, with an HTTP 200 and no error. Verified live; see [api/bookings § datetime format](../api/bookings.md#datetime-format-is-load-bearing--an-offset-bearing-value-silently-shifts-the-booking). Because it cannot be detected at send time, every write reads the stored value back and compares.
 - "Today"/"tomorrow"/date arithmetic resolve on the **space's** calendar (via `Intl` with the cached IANA zone), not the machine's.
 - Output renders wall-clock values plainly (`2026-09-01 14:00`) with the space named in the header — no `Z`, no offset; showing a zone marker on a value not in that zone would be a lie.
 

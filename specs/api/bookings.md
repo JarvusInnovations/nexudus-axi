@@ -71,7 +71,7 @@ POST /en/bookings/deletejson/{id}                           body: {}            
 
 - **`newBookingJson`/`bookingJson` are NOT the member path** — they return an `Access Denied` envelope for member credentials (they're the staff/admin save). The member portal commits through the basket: `CreateInvoice` books the item(s) and creates the (zero-value, when credit-covered) invoice.
 - **`PostItems` also commits** — it is not an add-to-cart; the portal's basket is client-side state. The tool uses `CreateInvoice` only; calling both double-books.
-- **Success is an empty 200 body.** The booking id is not returned — recover it by refetching the calendar feed and matching resource + window.
+- **Success is an empty 200 body.** The booking id is not returned. Recover it by snapshotting the caller's calendar rows before the write and taking the **id set-difference** afterwards — never by matching the requested window, which silently fails exactly when the stored time diverges (see [commands/book § confirmed times](../commands/book.md#confirmed-times)).
 - Business-rule failures come as **HTTP 200 with an envelope**: `{Status: 500, Message, Errors[]}` — e.g. `"This resource is already booked..."` with `Errors[0].Message` carrying JSON naming the `ConflictingUniqueId`. Treat `Status >= 400` in a 200 body as the real outcome.
 - `deletejson/{id}` with an empty JSON body returns `{Status: 200, Message: ""}` on success; cancelling restores credit-covered value per the space's policy.
 - `getbookingprice` returns an **empty 200** — useless; `PreviewInvoice` is the sole cost source.

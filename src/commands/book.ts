@@ -15,7 +15,7 @@ import { activeSpaceFrom } from "./auth.js";
 
 /** `book` — preview → commit in one invocation; see `specs/commands/book.md`. */
 
-const USAGE = "nexudus-axi book --room <room> --date <when> --from <time> --to <time|+dur> [--dry-run]";
+const USAGE = "nexudus-axi book --room <room> [--date <when>] --from <time> --to <time|+dur> [--dry-run]";
 const INTERVAL = 30;
 
 export async function bookCommand(args: string[]): Promise<string> {
@@ -54,6 +54,36 @@ export async function bookCommand(args: string[]): Promise<string> {
   });
   const { booked } = compressSlots(slots, INTERVAL);
   const conflicts = booked.filter((b) => b.from < toKey && b.to > fromKey);
+
+  // A re-run of a booking that already landed is a no-op, not a failure: if
+  // the conflict is the caller's own booking of this room for exactly this
+  // window, report that booking (exit 0) instead of UNAVAILABLE. A failed
+  // lookup falls through to the conflict error — never a guessed no-op.
+  if (conflicts.length > 0) {
+    const mine = await fetchMyBookings(active, date, date).catch(() => []);
+    const existing = mine.find(
+      (r) => r.resourceId === room.Id && r.start.slice(0, 16) === fromKey && r.end.slice(0, 16) === toKey,
+    );
+    if (existing) {
+      return joinBlocks(
+        renderObject(
+          compact({
+            booked: room.Name,
+            id: existing.id,
+            space: active.space,
+            date,
+            window: `${renderTime(window.from)}–${renderTime(window.to)}`,
+            status: "already booked by you for this window (no-op)",
+          }),
+        ),
+        renderHelp([
+          "Run `nexudus-axi bookings` to see it in context",
+          `Run \`nexudus-axi bookings cancel ${existing.id}\` to undo`,
+        ]),
+      );
+    }
+  }
+
   if (conflicts.length > 0 || inWindow.length === 0) {
     throw new AxiError(
       conflicts.length > 0

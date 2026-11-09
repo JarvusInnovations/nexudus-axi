@@ -13,38 +13,45 @@
 Follows calendly-axi's shape (which follows harvest-axi + remarkable-axi):
 
 ```
-bin/nexudus-axi.ts         # shebang entry → src/cli.ts main()
+bin/nexudus-axi.ts         # shebang entry: bare --version via axi-sdk-js/fast-path, else lazy-imports src/cli.ts main()
 src/
 ├── cli.ts                 # runAxiCli wiring, formatError (USAGE/UNKNOWN_FLAG/VALIDATION_ERROR → exit 2;
 │                          #   unexpected throws wrapped as INTERNAL_ERROR — no stack trace on stdout)
-├── flags.ts               # declared per-command flag sets; unknown flags rejected with valid set inlined;
+├── flags.ts               # declared per-command flag sets + positional counts; unknown flags and extra
+│                          #   positionals rejected (UNKNOWN_FLAG / USAGE) with the valid set or usage inlined;
 │                          #   --space is an always-allowed global (parsed before command dispatch)
 ├── reference.ts           # COMMAND_GROUPS: single source for top-level help, per-command --help, SKILL.md
 ├── version.ts             # package version at runtime (no build stamping)
-├── config.ts              # multi-space store: config.json (default space) + spaces/{slug}/token.json (0600)
+├── config.ts              # multi-space store: config.json (default space) + spaces/{slug}/token.json
+│                          #   (0600) + spaces/{slug}/prefs.json (favorites; survives logout)
 ├── nexudus/
 │   ├── client.ts          # per-space authed fetch: bearer + Accept + nx-app-version headers,
 │   │                      #   401→refresh-once→retry, error translation (incl. HTML-body guard)
-│   ├── token.ts           # password/refresh grants against /api/token
+│   ├── token.ts           # password/refresh grants against /api/token, client_id-bound
+│   ├── profile.ts         # profile bootstrap → ProfileCache (coworker/business identity)
 │   ├── resolve.ts         # room resolution: numeric id | name substring → {id, guid, name, rules}
-│   └── slots.ts           # AvailableSlots[] → contiguous free/booked ranges
+│   ├── slots.ts           # isSlotFree (THE occupancy rule) + AvailableSlots[] → free/booked ranges
+│   ├── booking.ts         # Booking payload, PreviewInvoice pricing, CreateInvoice commit,
+│   │                      #   cancel + cancellation fee; portal action-envelope translation
+│   └── mybookings.ts      # calendar-feed reads filtered to the caller (string-tolerant coworkerId)
 ├── output/                # FieldDef/render helpers ported from the sibling tools
 ├── time/wallclock.ts      # human date/time forms → space wall-clock strings (fake-Z aware);
-│                          #   space-timezone "today"/"tomorrow" via Intl
+│                          #   space-timezone "today"/"now" via Intl, quarter-hour snapping
 └── commands/
-    ├── home.ts
+    ├── home.ts            # ambient view: upcoming bookings + credits
     ├── auth.ts            # login / status / use / logout
     ├── doctor.ts
-    ├── setup.ts           # hooks install / status / uninstall
-    ├── rooms.ts           # list / view / slots
+    ├── setup.ts           # hooks install / status / uninstall, --scope user|project
+    ├── rooms.ts           # list / view / slots / free / day / favorites
     ├── credits.ts
-    ├── book.ts
-    └── bookings.ts        # list / view / cancel
+    ├── book.ts            # preview → commit → confirm-from-server
+    ├── bookings.ts        # list / view / cancel
+    └── stub.ts            # NOT_IMPLEMENTED helper for unbuilt surfaces
 ```
 
 ## Config & state
 
-Per [spaces-and-accounts](behaviors/spaces-and-accounts.md): `$XDG_CONFIG_HOME/nexudus-axi` or `~/.config/nexudus-axi` (dir 0700); `config.json` `{version, default_space}`; `spaces/{slug}/token.json` (0600) holding tokens + profile cache. Env overrides: `NEXUDUS_AXI_TOKEN` (+ `NEXUDUS_AXI_SPACE`), `NEXUDUS_AXI_CONFIG_DIR`, `NEXUDUS_AXI_DISABLE_HOOKS`.
+Per [spaces-and-accounts](behaviors/spaces-and-accounts.md): `$XDG_CONFIG_HOME/nexudus-axi` or `~/.config/nexudus-axi` (dir 0700); `config.json` `{version, default_space}`; `spaces/{slug}/token.json` (0600) holding tokens + profile cache, and `spaces/{slug}/prefs.json` holding non-credential preferences (favorite rooms) that survive logout. Env overrides: `NEXUDUS_AXI_TOKEN` (+ `NEXUDUS_AXI_SPACE`), `NEXUDUS_AXI_PASSWORD`, `NEXUDUS_AXI_CONFIG_DIR`, `NEXUDUS_AXI_DISABLE_HOOKS`.
 
 ## Docs & skill generation
 

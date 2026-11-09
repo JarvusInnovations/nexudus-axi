@@ -253,7 +253,7 @@ export function resolveActiveSpace(options: {
   const slugs = listSpaceSlugs();
   if (slugs.length === 0) {
     throw new AxiError("No Nexudus space is connected", "NO_TOKEN", [
-      "Run `nexudus-axi auth login --space <slug> --email <email> --password <pw>` to connect",
+      "Run `nexudus-axi auth login --space <slug> --email <email> --password-stdin` to connect (pipe the password in)",
     ]);
   }
 
